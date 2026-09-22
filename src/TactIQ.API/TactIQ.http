@@ -1,0 +1,6 @@
+@TactIQ_HostAddress = http://localhost:5064
+
+GET {{TactIQ_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

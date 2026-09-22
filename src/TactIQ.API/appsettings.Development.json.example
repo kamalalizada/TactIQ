@@ -1,0 +1,14 @@
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "ConnectionStrings": {
+    "Default": "Host=localhost;Port=5432;Database=tactiq;Username=tactiq;Password=<docker-compose.yml faylindaki POSTGRES_PASSWORD>"
+  },
+  "Jwt": {
+    "Key": "<en azi 32 simvolluq tesadufi acar>"
+  }
+}

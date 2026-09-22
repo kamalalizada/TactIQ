@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: tactiq-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tactiq
+      POSTGRES_USER: tactiq
+      POSTGRES_PASSWORD: tactiq_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - tactiq-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tactiq -d tactiq"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  tactiq-pgdata:
