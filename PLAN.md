@@ -270,6 +270,22 @@ Solution 4 ayrı layihədən (csproj) ibarət olacaq:
   * Sürət nəzarəti (1x/2x/4x), pause/resume, "finish now" (qalan dəqiqələri bir anda hesablayır).
   * Matç bitəndə: nəticə + tam `MatchEvent[]` + `TeamTactics` DB-yə yazılır, liqanın həftəsi avtomatik irəliləyir.
   * 51 unit test (17-si canlı sessiya üçün): taktika təsiri, əvəzetmə qaydaları, pause, fast-forward, 90 dəqiqə limiti.
+* [x] **Mərhələ 4.5: Dərin Matç Mühərriki** ✅
+  * Hücum epizodu modeli: topa sahiblik → şansın yaranması → zərbəçinin seçimi → qapıçı ilə duel. Sadə "sikkə atma" modeli ləğv olundu.
+  * **Oyunçu səviyyəsində hadisələr:** kim qol vurdu, kim assist etdi, kim vərəqə aldı, kim xilas etdi (`MatchEvent.PlayerId`, `AssistPlayerId`).
+  * **Stamina:** oyunçu matç boyu yorulur (PHY-dən asılı), yorulduqca atributları 25%-ə qədər düşür. Matçlar arası tam bərpa olunmur — rotasiya real fayda verir.
+  * **Vərəqə və zədə:** sarı/qırmızı vərəqə, ikinci sarı, 5 sarıya cəza, zədə (1-4 matç kənar). Cəzalı/zədəli oyunçu avtomatik heyətdən çıxarılır, yerinə ən uyğun ehtiyat qoyulur.
+  * 10 nəfərlə oynamaq bütün komandanı zəiflədir.
+  * `EngineBalanceTests` — nəticələrin real futbol diapazonunda qalmasını qoruyur.
+  * Kalibrasiya (20 komandalı liqa, 380 matç): 2.6 qol/matç, 2.9 sarı, 0.03 qırmızı, ev/heç-heçə/səfər ≈ 40/27/33%, qolların 57%-i hücumçulardan.
+* [x] **Mərhələ 4.6: Statistika və Kubok** ✅
+  * **Statistika:** qol kralı, assist kralı, vərəqə cədvəli, komanda formu (son 5 matç), baş-başa tarixçə, mövsüm xülasəsi (ən böyük qələbə, təmiz qapı sayı). Liqa və kubok matçları birlikdə hesablanır.
+  * **Kubok:** liqa bitəndən sonra 8 komandalıq knockout — 1/4 final → 1/2 final → final. İlk iki raund ev-səfər, final tək matç.
+  * Bərabərlik halında **penalti seriyası** (oyunçuların SHO/PHY-sindən asılı, 5 zərbə + sudden death).
+  * Manager Mode-da kubok matçı da **canlı oynanılır** — eyni SignalR/taktika sistemi.
+  * Kubok nəticələri liqa cədvəlinə təsir etmir və liqa həftəsini irəlilətmir (`Competition` filtri ilə ayrılıb).
+  * Endpoint-lər: `GET /statistics`, `GET /head-to-head`, `POST /cup/start`, `GET /cup`, `POST /cup/play-round`.
+  * 21 yeni test (statistika + kubok qaydaları), cəmi 81.
 * [ ] **Mərhələ 5: React Frontend Tərtibatı**
   * Auth ekranları, Dashboard, Cədvəl və Fixture UI dizaynı.
   * `LiveMatchView` + `TacticsPanel` — SignalR ilə canlı matçı izləmək və taktika idarə etmək.

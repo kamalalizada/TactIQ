@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TactIQ.Application.Leagues;
+using TactIQ.Application.Statistics;
 
 namespace TactIQ.API.Controllers;
 
@@ -46,6 +47,19 @@ public class LeaguesController(ILeagueService leagues) : ControllerBase
     [HttpPost("{leagueId:guid}/simulate-week")]
     public async Task<ActionResult<SimulateWeekResult>> SimulateWeek(Guid leagueId, CancellationToken ct) =>
         Ok(await leagues.SimulateWeekAsync(UserId, leagueId, ct));
+
+    /// <summary>Scoring charts, discipline and recent form for the whole league.</summary>
+    [HttpGet("{leagueId:guid}/statistics")]
+    public async Task<ActionResult<LeagueStatisticsDto>> Statistics(Guid leagueId, CancellationToken ct) =>
+        Ok(await leagues.GetStatisticsAsync(UserId, leagueId, ct));
+
+    [HttpGet("{leagueId:guid}/head-to-head")]
+    public async Task<ActionResult<HeadToHeadSummary>> HeadToHead(
+        Guid leagueId,
+        [FromQuery] Guid teamA,
+        [FromQuery] Guid teamB,
+        CancellationToken ct) =>
+        Ok(await leagues.GetHeadToHeadAsync(UserId, leagueId, teamA, teamB, ct));
 
     [HttpDelete("{leagueId:guid}")]
     public async Task<IActionResult> Delete(Guid leagueId, CancellationToken ct) =>

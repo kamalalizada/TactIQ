@@ -14,10 +14,11 @@ public class MatchEngineTests
         var away = TestTeamFactory.Create("Away", 75);
 
         var result = _engine.SimulateInstant(home, away);
+        var goals = result.Events.Where(e => e.EventType == MatchEventType.Goal).ToList();
 
-        Assert.Equal(result.HomeGoals, result.Events.Count(e => e.TeamId == home.Id));
-        Assert.Equal(result.AwayGoals, result.Events.Count(e => e.TeamId == away.Id));
-        Assert.All(result.Events, e => Assert.Equal(MatchEventType.Goal, e.EventType));
+        Assert.Equal(result.HomeGoals, goals.Count(e => e.TeamId == home.Id));
+        Assert.Equal(result.AwayGoals, goals.Count(e => e.TeamId == away.Id));
+        Assert.All(goals, e => Assert.NotNull(e.PlayerId));
     }
 
     [Fact]
@@ -52,15 +53,16 @@ public class MatchEngineTests
     }
 
     [Fact]
-    public void HomeAdvantageRaisesBothRatings()
+    public void HomeAdvantageLiftsTheAttackOnly()
     {
         var team = TestTeamFactory.Create("Team", 70);
 
         var atHome = _engine.ComputeStrength(team, true, TacticalStyle.Balanced, 0);
         var away = _engine.ComputeStrength(team, false, TacticalStyle.Balanced, 0);
 
+        // Boosting both would cancel out in every attack-versus-defence ratio.
         Assert.True(atHome.Attack > away.Attack);
-        Assert.True(atHome.Defense > away.Defense);
+        Assert.Equal(away.Defense, atHome.Defense, 3);
     }
 
     [Fact]

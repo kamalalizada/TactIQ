@@ -163,6 +163,12 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("CupWinnerTeamId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("CurrentCupRound")
+                        .HasColumnType("integer");
+
                     b.Property<int>("CurrentWeek")
                         .HasColumnType("integer");
 
@@ -201,10 +207,19 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                     b.Property<int>("AwayGoals")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("AwayPenalties")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("AwayTeamId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("Competition")
+                        .HasColumnType("integer");
+
                     b.Property<int>("HomeGoals")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("HomePenalties")
                         .HasColumnType("integer");
 
                     b.Property<Guid>("HomeTeamId")
@@ -216,6 +231,15 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("LeagueId")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("Leg")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Round")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("TieId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("WeekNumber")
                         .HasColumnType("integer");
 
@@ -224,6 +248,10 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                     b.HasIndex("AwayTeamId");
 
                     b.HasIndex("HomeTeamId");
+
+                    b.HasIndex("TieId");
+
+                    b.HasIndex("LeagueId", "Competition");
 
                     b.HasIndex("LeagueId", "WeekNumber");
 
@@ -234,6 +262,9 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AssistPlayerId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Description")
@@ -269,6 +300,9 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("Condition")
+                        .HasColumnType("integer");
+
                     b.Property<int>("Defending")
                         .HasColumnType("integer");
 
@@ -278,10 +312,19 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsStarter")
                         .HasColumnType("boolean");
 
+                    b.Property<int>("MatchesInjured")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MatchesSuspended")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)");
+
+                    b.Property<int>("Overall")
+                        .HasColumnType("integer");
 
                     b.Property<int>("Pace")
                         .HasColumnType("integer");
@@ -303,6 +346,9 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid>("TeamId")
                         .HasColumnType("uuid");
+
+                    b.Property<int>("YellowCards")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 

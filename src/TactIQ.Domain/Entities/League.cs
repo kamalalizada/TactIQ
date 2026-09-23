@@ -19,6 +19,16 @@ public class League
     public List<Team> Teams { get; set; } = [];
     public List<Match> Matches { get; set; } = [];
 
+    /// <summary>The cup starts once the league season is over.</summary>
+    public CupRound? CurrentCupRound { get; set; }
+
+    public Guid? CupWinnerTeamId { get; set; }
+
     public int TotalWeeks => 2 * (TeamCount - 1);
+
+    /// <summary>True once every league week has been played. The cup may still be running.</summary>
     public bool IsFinished => CurrentWeek > TotalWeeks;
+
+    public bool CupStarted => CurrentCupRound is not null || CupWinnerTeamId is not null;
+    public bool CupFinished => CupWinnerTeamId is not null;
 }

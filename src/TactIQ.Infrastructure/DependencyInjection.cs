@@ -3,11 +3,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using TactIQ.Application.Abstractions;
+using TactIQ.Application.Cup;
 using TactIQ.Application.Leagues;
 using TactIQ.Application.Scheduling;
 using TactIQ.Application.Seeding;
 using TactIQ.Application.Simulation;
 using TactIQ.Application.Standings;
+using TactIQ.Application.Statistics;
 using TactIQ.Infrastructure.Identity;
 using TactIQ.Infrastructure.Persistence;
 
@@ -38,9 +40,11 @@ public static class DependencyInjection
 
         services.AddSingleton<IScheduleGenerator, RoundRobinScheduleGenerator>();
         services.AddSingleton<IStandingsCalculator, StandingsCalculator>();
+        services.AddSingleton<IStatisticsCalculator, StatisticsCalculator>();
         services.AddSingleton<IMatchEngine>(_ => new MatchEngine());
         services.AddSingleton<ITeamFactory>(_ => new TeamFactory());
         services.AddScoped<ILeagueService, LeagueService>();
+        services.AddScoped<ICupService, CupService>();
 
         return services;
     }

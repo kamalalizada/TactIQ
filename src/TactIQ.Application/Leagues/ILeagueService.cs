@@ -1,3 +1,5 @@
+using TactIQ.Application.Statistics;
+
 namespace TactIQ.Application.Leagues;
 
 public interface ILeagueService
@@ -15,6 +17,10 @@ public interface ILeagueService
     Task<IReadOnlyList<MatchDto>> GetFixturesAsync(string userId, Guid leagueId, int? week, CancellationToken ct = default);
 
     Task<SimulateWeekResult> SimulateWeekAsync(string userId, Guid leagueId, CancellationToken ct = default);
+
+    Task<LeagueStatisticsDto> GetStatisticsAsync(string userId, Guid leagueId, CancellationToken ct = default);
+
+    Task<HeadToHeadSummary> GetHeadToHeadAsync(string userId, Guid leagueId, Guid teamAId, Guid teamBId, CancellationToken ct = default);
 
     Task<bool> DeleteAsync(string userId, Guid leagueId, CancellationToken ct = default);
 }

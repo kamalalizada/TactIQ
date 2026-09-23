@@ -9,32 +9,65 @@ namespace TactIQ.Application.Live;
 /// In-memory state of a match being played out minute by minute. Only the
 /// manager's own match runs this way; every other match is settled instantly.
 /// </summary>
-public class LiveMatchSession(Match match, Guid userTeamId, TacticalStyle style, string formation, int speedMultiplier)
+public class LiveMatchSession
 {
     private readonly List<LiveEventDto> _events = [];
     private readonly Lock _gate = new();
+    private readonly IMatchEngine _engine;
+    private readonly MatchSide _home;
+    private readonly MatchSide _away;
 
-    public Guid MatchId { get; } = match.Id;
-    public Guid LeagueId { get; } = match.LeagueId;
-    public Guid UserTeamId { get; } = userTeamId;
+    public LiveMatchSession(
+        Match match,
+        Guid userTeamId,
+        TacticalStyle style,
+        string formation,
+        int speedMultiplier,
+        IMatchEngine engine)
+    {
+        MatchId = match.Id;
+        LeagueId = match.LeagueId;
+        UserTeamId = userTeamId;
+        HomeTeam = match.HomeTeam;
+        AwayTeam = match.AwayTeam;
+        UserStyle = style;
+        UserFormation = formation;
+        SpeedMultiplier = Math.Clamp(speedMultiplier, 1, 4);
 
-    public Team HomeTeam { get; } = match.HomeTeam;
-    public Team AwayTeam { get; } = match.AwayTeam;
+        _engine = engine;
+
+        var userIsHome = HomeTeam.Id == userTeamId;
+        _home = engine.CreateSide(HomeTeam, isHome: true, userIsHome ? style : TacticalStyle.Balanced);
+        _away = engine.CreateSide(AwayTeam, isHome: false, userIsHome ? TacticalStyle.Balanced : style);
+    }
+
+    public Guid MatchId { get; }
+    public Guid LeagueId { get; }
+    public Guid UserTeamId { get; }
+
+    public Team HomeTeam { get; }
+    public Team AwayTeam { get; }
 
     public int Minute { get; private set; }
-    public int HomeGoals { get; private set; }
-    public int AwayGoals { get; private set; }
+    public int HomeGoals => _home.Goals;
+    public int AwayGoals => _away.Goals;
     public LiveMatchStatus Status { get; private set; } = LiveMatchStatus.Running;
 
-    public TacticalStyle UserStyle { get; private set; } = style;
-    public string UserFormation { get; private set; } = formation;
+    public TacticalStyle UserStyle { get; private set; }
+    public string UserFormation { get; private set; }
     public int SubstitutionsUsed { get; private set; }
 
-    public int SpeedMultiplier { get; private set; } = Math.Clamp(speedMultiplier, 1, 4);
+    public int SpeedMultiplier { get; private set; }
 
     public bool UserIsHome => HomeTeam.Id == UserTeamId;
     public Team UserTeam => UserIsHome ? HomeTeam : AwayTeam;
     public Team OpponentTeam => UserIsHome ? AwayTeam : HomeTeam;
+
+    private MatchSide UserSide => UserIsHome ? _home : _away;
+
+    /// <summary>Condition, cards and injuries both sides finished with.</summary>
+    public IReadOnlyList<PlayerAftermath> Aftermath =>
+        _engine.Aftermath(_home).Concat(_engine.Aftermath(_away)).ToList();
 
     public IReadOnlyList<LiveEventDto> Events
     {
@@ -43,7 +76,11 @@ public class LiveMatchSession(Match match, Guid userTeamId, TacticalStyle style,
 
     public void ApplyStyle(TacticalStyle style)
     {
-        lock (_gate) UserStyle = style;
+        lock (_gate)
+        {
+            UserStyle = style;
+            UserSide.Style = style;
+        }
     }
 
     public void ApplyFormation(string formation)
@@ -60,7 +97,7 @@ public class LiveMatchSession(Match match, Guid userTeamId, TacticalStyle style,
     /// Plays out every remaining minute at once, so the manager can skip to the
     /// final whistle. Returns the events those minutes produced.
     /// </summary>
-    public IReadOnlyList<LiveEventDto> FastForward(IMatchEngine engine, Random random)
+    public IReadOnlyList<LiveEventDto> FastForward()
     {
         var produced = new List<LiveEventDto>();
 
@@ -74,10 +111,7 @@ public class LiveMatchSession(Match match, Guid userTeamId, TacticalStyle style,
         }
 
         while (Status != LiveMatchStatus.Finished)
-        {
-            if (Tick(engine, random) is { } e)
-                produced.Add(e);
-        }
+            produced.AddRange(Tick());
 
         return produced;
     }
@@ -92,9 +126,9 @@ public class LiveMatchSession(Match match, Guid userTeamId, TacticalStyle style,
                 return false;
             }
 
-            var team = UserTeam;
-            var outgoing = team.Players.FirstOrDefault(p => p.Id == playerOutId);
-            var incoming = team.Players.FirstOrDefault(p => p.Id == playerInId);
+            var side = UserSide;
+            var outgoing = side.Players.FirstOrDefault(p => p.Id == playerOutId);
+            var incoming = side.Players.FirstOrDefault(p => p.Id == playerInId);
 
             if (outgoing is null || incoming is null)
             {
@@ -102,64 +136,60 @@ public class LiveMatchSession(Match match, Guid userTeamId, TacticalStyle style,
                 return false;
             }
 
-            if (!outgoing.IsStarter)
+            if (!outgoing.OnPitch)
             {
                 error = "The outgoing player is not on the pitch.";
                 return false;
             }
 
-            if (incoming.IsStarter)
+            if (incoming.OnPitch)
             {
                 error = "The incoming player is already on the pitch.";
                 return false;
             }
 
-            outgoing.IsStarter = false;
-            incoming.IsStarter = true;
+            if (incoming.SentOff || incoming.Injured)
+            {
+                error = "That player cannot come on.";
+                return false;
+            }
+
+            outgoing.OnPitch = false;
+            incoming.OnPitch = true;
+
+            // Keep the squad entity in step so the roster reflects who finished.
+            outgoing.Source.IsStarter = false;
+            incoming.Source.IsStarter = true;
+
             SubstitutionsUsed++;
 
             _events.Add(new LiveEventDto(
                 Minute,
                 MatchEventType.Substitution,
-                team.Id,
-                $"{incoming.Name} replaces {outgoing.Name}"));
+                side.Team.Id,
+                $"{incoming.Name} replaces {outgoing.Name}",
+                incoming.Id));
 
             error = string.Empty;
             return true;
         }
     }
 
-    /// <summary>Advances one simulated minute and returns any event it produced.</summary>
-    public LiveEventDto? Tick(IMatchEngine engine, Random random)
+    /// <summary>Advances one simulated minute and returns whatever it produced.</summary>
+    public IReadOnlyList<LiveEventDto> Tick()
     {
         lock (_gate)
         {
             if (Status != LiveMatchStatus.Running)
-                return null;
+                return [];
 
             Minute++;
 
-            var homeStyle = UserIsHome ? UserStyle : TacticalStyle.Balanced;
-            var awayStyle = UserIsHome ? TacticalStyle.Balanced : UserStyle;
+            var produced = _engine.PlayMinute(_home, _away, Minute)
+                .Select(e => new LiveEventDto(e.Minute, e.EventType, e.TeamId, e.Description, e.PlayerId, e.AssistPlayerId))
+                .ToList();
 
-            var home = engine.ComputeStrength(HomeTeam, true, homeStyle, 0);
-            var away = engine.ComputeStrength(AwayTeam, false, awayStyle, 0);
-
-            LiveEventDto? produced = null;
-
-            if (random.NextDouble() < engine.GoalChancePerMinute(home, away))
-            {
-                HomeGoals++;
-                produced = new LiveEventDto(Minute, MatchEventType.Goal, HomeTeam.Id, $"Goal for {HomeTeam.Name}");
-            }
-            else if (random.NextDouble() < engine.GoalChancePerMinute(away, home))
-            {
-                AwayGoals++;
-                produced = new LiveEventDto(Minute, MatchEventType.Goal, AwayTeam.Id, $"Goal for {AwayTeam.Name}");
-            }
-
-            if (produced is not null)
-                _events.Add(produced);
+            _events.AddRange(produced);
 
             if (Minute >= EngineConstants.RegularTimeMinutes)
                 Status = LiveMatchStatus.Finished;
@@ -192,6 +222,7 @@ public class LiveMatchSession(Match match, Guid userTeamId, TacticalStyle style,
         {
             return new LiveStateDto(
                 MatchId,
+                LeagueId,
                 Minute,
                 Status,
                 HomeTeam.Id,

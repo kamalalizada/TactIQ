@@ -30,7 +30,7 @@ public class LiveMatchSessionTests
         };
 
         var userTeamId = userIsHome ? home.Id : away.Id;
-        return new LiveMatchSession(match, userTeamId, style, "4-4-2", 1);
+        return new LiveMatchSession(match, userTeamId, style, "4-4-2", 1, Engine);
     }
 
     [Fact]
@@ -50,8 +50,8 @@ public class LiveMatchSessionTests
     {
         var session = CreateSession(out _, out _);
 
-        session.Tick(Engine, new Random(1));
-        session.Tick(Engine, new Random(2));
+        session.Tick();
+        session.Tick();
 
         Assert.Equal(2, session.Minute);
     }
@@ -63,7 +63,7 @@ public class LiveMatchSessionTests
         var random = new Random(42);
 
         for (var i = 0; i < EngineConstants.RegularTimeMinutes; i++)
-            session.Tick(Engine, random);
+            session.Tick();
 
         Assert.Equal(EngineConstants.RegularTimeMinutes, session.Minute);
         Assert.Equal(LiveMatchStatus.Finished, session.Status);
@@ -76,7 +76,7 @@ public class LiveMatchSessionTests
         var random = new Random(42);
 
         for (var i = 0; i < EngineConstants.RegularTimeMinutes + 10; i++)
-            session.Tick(Engine, random);
+            session.Tick();
 
         Assert.Equal(EngineConstants.RegularTimeMinutes, session.Minute);
     }
@@ -87,13 +87,13 @@ public class LiveMatchSessionTests
         var session = CreateSession(out _, out _);
 
         session.Pause();
-        session.Tick(Engine, new Random(1));
+        session.Tick();
 
         Assert.Equal(0, session.Minute);
         Assert.Equal(LiveMatchStatus.Paused, session.Status);
 
         session.Resume();
-        session.Tick(Engine, new Random(1));
+        session.Tick();
 
         Assert.Equal(1, session.Minute);
     }
@@ -105,7 +105,7 @@ public class LiveMatchSessionTests
         var random = new Random(2024);
 
         while (session.Status != LiveMatchStatus.Finished)
-            session.Tick(Engine, random);
+            session.Tick();
 
         var state = session.Snapshot();
         var goals = state.Events.Where(e => e.EventType == MatchEventType.Goal).ToList();
@@ -153,12 +153,11 @@ public class LiveMatchSessionTests
                 AwayTeam = away
             };
 
-            var session = new LiveMatchSession(match, home.Id, style, "4-4-2", 1);
-            var random = new Random(seed);
-            var engine = new MatchEngine(new Random(seed));
+            var session = new LiveMatchSession(
+                match, home.Id, style, "4-4-2", 1, new MatchEngine(new Random(seed)));
 
             while (session.Status != LiveMatchStatus.Finished)
-                session.Tick(engine, random);
+                session.Tick();
 
             return session.HomeGoals;
         }
@@ -248,8 +247,8 @@ public class LiveMatchSessionTests
     {
         var session = CreateSession(out _, out _);
 
-        session.Tick(Engine, new Random(3));
-        session.FastForward(Engine, new Random(3));
+        session.Tick();
+        session.FastForward();
 
         Assert.Equal(LiveMatchStatus.Finished, session.Status);
         Assert.Equal(EngineConstants.RegularTimeMinutes, session.Minute);
@@ -261,7 +260,7 @@ public class LiveMatchSessionTests
         var session = CreateSession(out _, out _);
 
         session.Pause();
-        session.FastForward(Engine, new Random(3));
+        session.FastForward();
 
         Assert.Equal(LiveMatchStatus.Finished, session.Status);
     }

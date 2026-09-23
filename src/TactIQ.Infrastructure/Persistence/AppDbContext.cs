@@ -62,12 +62,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
         {
             e.Property(p => p.Name).IsRequired().HasMaxLength(120);
             e.HasIndex(p => p.TeamId);
-            e.Ignore(p => p.Overall);
         });
 
         builder.Entity<Match>(e =>
         {
             e.HasIndex(m => new { m.LeagueId, m.WeekNumber });
+            e.HasIndex(m => new { m.LeagueId, m.Competition });
+            e.HasIndex(m => m.TieId);
+            e.Ignore(m => m.WentToPenalties);
 
             // Both FKs point at Team; restrict so deleting a league cascades only once.
             e.HasOne(m => m.HomeTeam)

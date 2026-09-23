@@ -27,7 +27,12 @@ public record PlayerDto(
     int Defending,
     int Physical,
     int Overall,
-    bool IsStarter);
+    bool IsStarter,
+    int Condition,
+    int MatchesInjured,
+    int MatchesSuspended,
+    int YellowCards,
+    bool IsAvailable);
 
 public record TeamDto(
     Guid Id,
@@ -38,10 +43,23 @@ public record TeamDto(
     double TeamOverall,
     IReadOnlyList<PlayerDto> Players);
 
-public record MatchEventDto(int Minute, MatchEventType EventType, Guid TeamId, string Description);
+public record MatchEventDto(
+    int Minute,
+    MatchEventType EventType,
+    Guid TeamId,
+    string Description,
+    Guid? PlayerId,
+    Guid? AssistPlayerId);
 
 public record MatchDto(
     Guid Id,
+    Guid LeagueId,
+    CompetitionType Competition,
+    CupRound? Round,
+    int? Leg,
+    Guid? TieId,
+    int? HomePenalties,
+    int? AwayPenalties,
     int WeekNumber,
     Guid HomeTeamId,
     string HomeTeamName,

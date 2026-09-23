@@ -5,6 +5,7 @@ using TactIQ.Application.Abstractions;
 using TactIQ.Application.Live;
 using TactIQ.Application.Simulation;
 using TactIQ.Domain.Entities;
+using TactIQ.Domain.Enums;
 
 namespace TactIQ.API.Live;
 
@@ -44,7 +45,8 @@ public class LiveMatchService(
         if (match.IsPlayed)
             throw new InvalidOperationException("This match has already been played.");
 
-        var session = new LiveMatchSession(match, userTeamId, request.Style, request.Formation, request.SpeedMultiplier);
+        var session = new LiveMatchSession(
+            match, userTeamId, request.Style, request.Formation, request.SpeedMultiplier, matchEngine);
 
         if (!Sessions.TryAdd(matchId, session))
             return Sessions[matchId].Snapshot();
@@ -112,7 +114,7 @@ public class LiveMatchService(
             loop.Dispose();
         }
 
-        var produced = session.FastForward(matchEngine, new Random());
+        var produced = session.FastForward();
         var snapshot = session.Snapshot();
 
         await PersistAsync(session, ct);
@@ -132,8 +134,6 @@ public class LiveMatchService(
 
         _ = Task.Run(async () =>
         {
-            var random = new Random();
-
             try
             {
                 while (!cts.Token.IsCancellationRequested && session.Status != LiveMatchStatus.Finished)
@@ -147,13 +147,13 @@ public class LiveMatchService(
                     if (session.Status == LiveMatchStatus.Paused)
                         continue;
 
-                    var produced = session.Tick(matchEngine, random);
+                    var produced = session.Tick();
                     var snapshot = session.Snapshot();
 
                     await BroadcastAsync(session.MatchId, "Tick", snapshot);
 
-                    if (produced is not null)
-                        await BroadcastAsync(session.MatchId, "MatchEvent", produced);
+                    foreach (var e in produced)
+                        await BroadcastAsync(session.MatchId, "MatchEvent", e);
                 }
 
                 if (session.Status == LiveMatchStatus.Finished)
@@ -197,9 +197,15 @@ public class LiveMatchService(
                 Minute = e.Minute,
                 EventType = e.EventType,
                 TeamId = e.TeamId,
+                PlayerId = e.PlayerId,
+                AssistPlayerId = e.AssistPlayerId,
                 Description = e.Description
             });
         }
+
+        SquadAftermath.Apply(
+            match.HomeTeam.Players.Concat(match.AwayTeam.Players),
+            session.Aftermath);
 
         match.Tactics.Add(new TeamTactics
         {
@@ -211,12 +217,19 @@ public class LiveMatchService(
 
         var league = await db.Leagues.FirstAsync(l => l.Id == session.LeagueId, ct);
 
-        // The week was held open while this match was pending; it can advance now.
-        var weekStillPending = await db.Matches
-            .AnyAsync(m => m.LeagueId == league.Id && m.WeekNumber == league.CurrentWeek && !m.IsPlayed && m.Id != match.Id, ct);
+        // Only a league fixture moves the season on; cup ties run on their own track.
+        if (match.Competition == CompetitionType.League)
+        {
+            var weekStillPending = await db.Matches
+                .AnyAsync(m => m.LeagueId == league.Id
+                            && m.Competition == CompetitionType.League
+                            && m.WeekNumber == league.CurrentWeek
+                            && !m.IsPlayed
+                            && m.Id != match.Id, ct);
 
-        if (!weekStillPending && match.WeekNumber == league.CurrentWeek)
-            league.CurrentWeek++;
+            if (!weekStillPending && match.WeekNumber == league.CurrentWeek)
+                league.CurrentWeek++;
+        }
 
         await db.SaveChangesAsync(ct);
     }

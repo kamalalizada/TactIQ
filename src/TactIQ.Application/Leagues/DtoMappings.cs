@@ -28,7 +28,12 @@ public static class DtoMappings
         player.Defending,
         player.Physical,
         player.Overall,
-        player.IsStarter);
+        player.IsStarter,
+        player.Condition,
+        player.MatchesInjured,
+        player.MatchesSuspended,
+        player.YellowCards,
+        player.IsAvailable);
 
     public static TeamDto ToDto(this Team team) => new(
         team.Id,
@@ -40,10 +45,17 @@ public static class DtoMappings
         team.Players.OrderBy(p => p.Position).ThenBy(p => p.ShirtNumber).Select(ToDto).ToList());
 
     public static MatchEventDto ToDto(this MatchEvent e) =>
-        new(e.Minute, e.EventType, e.TeamId, e.Description);
+        new(e.Minute, e.EventType, e.TeamId, e.Description, e.PlayerId, e.AssistPlayerId);
 
     public static MatchDto ToDto(this Match match, Guid? userTeamId) => new(
         match.Id,
+        match.LeagueId,
+        match.Competition,
+        match.Round,
+        match.Leg,
+        match.TieId,
+        match.HomePenalties,
+        match.AwayPenalties,
         match.WeekNumber,
         match.HomeTeamId,
         match.HomeTeam?.Name ?? string.Empty,

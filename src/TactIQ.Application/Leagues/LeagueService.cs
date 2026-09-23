@@ -4,6 +4,7 @@ using TactIQ.Application.Scheduling;
 using TactIQ.Application.Seeding;
 using TactIQ.Application.Simulation;
 using TactIQ.Application.Standings;
+using TactIQ.Application.Statistics;
 using TactIQ.Domain.Entities;
 using TactIQ.Domain.Enums;
 
@@ -14,7 +15,8 @@ public class LeagueService(
     IScheduleGenerator scheduleGenerator,
     ITeamFactory teamFactory,
     IMatchEngine matchEngine,
-    IStandingsCalculator standingsCalculator) : ILeagueService
+    IStandingsCalculator standingsCalculator,
+    IStatisticsCalculator statisticsCalculator) : ILeagueService
 {
     public const int DefaultTeamCount = 8;
 
@@ -94,7 +96,11 @@ public class LeagueService(
         await EnsureOwnedAsync(userId, leagueId, ct);
 
         var teams = await db.Teams.AsNoTracking().Where(t => t.LeagueId == leagueId).ToListAsync(ct);
-        var matches = await db.Matches.AsNoTracking().Where(m => m.LeagueId == leagueId).ToListAsync(ct);
+        // Cup results never count towards the league table.
+        var matches = await db.Matches
+            .AsNoTracking()
+            .Where(m => m.LeagueId == leagueId && m.Competition == CompetitionType.League)
+            .ToListAsync(ct);
 
         return standingsCalculator.Calculate(teams, matches).Select(r => r.ToDto()).ToList();
     }
@@ -108,7 +114,7 @@ public class LeagueService(
             .Include(m => m.HomeTeam)
             .Include(m => m.AwayTeam)
             .Include(m => m.Events)
-            .Where(m => m.LeagueId == leagueId);
+            .Where(m => m.LeagueId == leagueId && m.Competition == CompetitionType.League);
 
         if (week is { } w)
             query = query.Where(m => m.WeekNumber == w);
@@ -134,7 +140,9 @@ public class LeagueService(
             .Include(m => m.HomeTeam).ThenInclude(t => t.Players)
             .Include(m => m.AwayTeam).ThenInclude(t => t.Players)
             .Include(m => m.Events)
-            .Where(m => m.LeagueId == leagueId && m.WeekNumber == week)
+            .Where(m => m.LeagueId == leagueId
+                     && m.Competition == CompetitionType.League
+                     && m.WeekNumber == week)
             .ToListAsync(ct);
 
         var simulated = new List<Match>();
@@ -162,7 +170,16 @@ public class LeagueService(
         // The week only advances once every match in it is settled.
         var weekComplete = pendingUserMatch is null || pendingUserMatch.IsPlayed;
         if (weekComplete)
+        {
             league.CurrentWeek = week + 1;
+
+            // Bans and knocks tick down, and everyone gets some condition back.
+            var squads = await db.Players
+                .Where(p => db.Teams.Any(t => t.Id == p.TeamId && t.LeagueId == leagueId))
+                .ToListAsync(ct);
+
+            SquadAftermath.RecoverWeek(squads);
+        }
 
         await db.SaveChangesAsync(ct);
 
@@ -173,6 +190,55 @@ public class LeagueService(
             league.CurrentWeek,
             league.IsFinished);
     }
+
+    public async Task<LeagueStatisticsDto> GetStatisticsAsync(string userId, Guid leagueId, CancellationToken ct = default)
+    {
+        await EnsureOwnedAsync(userId, leagueId, ct);
+
+        var teams = await LoadSquadsAsync(leagueId, ct);
+        var matches = await LoadPlayedMatchesAsync(leagueId, ct);
+
+        return statisticsCalculator.Calculate(teams, matches);
+    }
+
+    public async Task<HeadToHeadSummary> GetHeadToHeadAsync(
+        string userId,
+        Guid leagueId,
+        Guid teamAId,
+        Guid teamBId,
+        CancellationToken ct = default)
+    {
+        await EnsureOwnedAsync(userId, leagueId, ct);
+
+        var teams = await db.Teams
+            .AsNoTracking()
+            .Where(t => t.LeagueId == leagueId && (t.Id == teamAId || t.Id == teamBId))
+            .ToListAsync(ct);
+
+        var teamA = teams.FirstOrDefault(t => t.Id == teamAId)
+                    ?? throw new KeyNotFoundException($"Team {teamAId} was not found.");
+        var teamB = teams.FirstOrDefault(t => t.Id == teamBId)
+                    ?? throw new KeyNotFoundException($"Team {teamBId} was not found.");
+
+        var matches = await LoadPlayedMatchesAsync(leagueId, ct);
+        return statisticsCalculator.HeadToHead(teamA, teamB, matches);
+    }
+
+    private async Task<List<Team>> LoadSquadsAsync(Guid leagueId, CancellationToken ct) =>
+        await db.Teams
+            .AsNoTracking()
+            .Include(t => t.Players)
+            .Where(t => t.LeagueId == leagueId)
+            .ToListAsync(ct);
+
+    private async Task<List<Match>> LoadPlayedMatchesAsync(Guid leagueId, CancellationToken ct) =>
+        await db.Matches
+            .AsNoTracking()
+            .Include(m => m.HomeTeam)
+            .Include(m => m.AwayTeam)
+            .Include(m => m.Events)
+            .Where(m => m.LeagueId == leagueId && m.IsPlayed)
+            .ToListAsync(ct);
 
     public async Task<bool> DeleteAsync(string userId, Guid leagueId, CancellationToken ct = default)
     {
@@ -203,11 +269,15 @@ public class LeagueService(
                 Minute = e.Minute,
                 EventType = e.EventType,
                 TeamId = e.TeamId,
-                Description = e.TeamId == match.HomeTeamId
-                    ? $"Goal for {match.HomeTeam.Name}"
-                    : $"Goal for {match.AwayTeam.Name}"
+                PlayerId = e.PlayerId,
+                AssistPlayerId = e.AssistPlayerId,
+                Description = e.Description
             });
         }
+
+        SquadAftermath.Apply(
+            match.HomeTeam.Players.Concat(match.AwayTeam.Players),
+            result.Aftermath);
     }
 
     private IQueryable<League> OwnedLeagues(string userId) =>

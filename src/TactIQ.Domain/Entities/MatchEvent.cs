@@ -14,5 +14,8 @@ public class MatchEvent
     public Guid TeamId { get; set; }
     public Guid? PlayerId { get; set; }
 
+    /// <summary>Set on goals that came from an assist.</summary>
+    public Guid? AssistPlayerId { get; set; }
+
     public string Description { get; set; } = string.Empty;
 }

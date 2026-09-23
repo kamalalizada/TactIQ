@@ -95,9 +95,15 @@ export type Position = (typeof Position)[keyof typeof Position];
 
 export const MatchEventType = {
   Goal: 0,
-  YellowCard: 1,   // hələ generasiya olunmur
-  RedCard: 2,      // hələ generasiya olunmur
+  YellowCard: 1,
+  RedCard: 2,
   Substitution: 3,
+  Injury: 4,
+  Assist: 5,          // qollar `assistPlayerId` daşıyır — ayrıca hadisə yaranmır
+  Save: 6,            // qapıçı xilas etdi
+  ShotOffTarget: 7,   // qapı kənarına zərbə
+  Penalty: 8,         // rezerv — hələ generasiya olunmur
+  OwnGoal: 9,         // rezerv — hələ generasiya olunmur
 } as const;
 export type MatchEventType = (typeof MatchEventType)[keyof typeof MatchEventType];
 
@@ -157,13 +163,19 @@ export interface Player {
   dribbling: number;
   defending: number;
   physical: number;
-  overall: number;     // 6 atributun ortalaması
+  overall: number;     // EA FC 26-dakı həqiqi reytinq (məs. Mbappé 91)
   isStarter: boolean;  // true = əsas 11-də, false = ehtiyat skamyasında
+
+  condition: number;         // 40-100. Matçda düşür, həftə ərzində bərpa olunur
+  matchesInjured: number;    // qalan zədə matçları (0 = sağlam)
+  matchesSuspended: number;  // qalan cəza matçları
+  yellowCards: number;       // mövsüm üzrə toplanmış sarı vərəqə (5-də cəza)
+  isAvailable: boolean;      // false olanlar oynaya bilmir
 }
 
 export interface Team {
   id: string;
-  name: string;
+  name: string;             // real klub adı (Real Madrid, Barcelona, Liverpool…)
   logoUrl: string | null;   // hazırda həmişə null — placeholder göstərin
   attackRating: number;     // yalnız əsas 11 üzərindən hesablanır
   defenseRating: number;
@@ -175,11 +187,26 @@ export interface MatchEvent {
   minute: number;
   eventType: MatchEventType;
   teamId: string;
-  description: string;   // məs. "Goal for Inter Milan"
+  description: string;            // məs. "Mbappe scores for Real Madrid, assisted by Bellingham"
+  playerId: string | null;        // hadisənin sahibi (qol vuran, vərəqə alan, xilas edən)
+  assistPlayerId: string | null;  // yalnız assistli qollarda dolu olur
 }
+
+export const CompetitionType = { League: 0, Cup: 1 } as const;
+export type CompetitionType = (typeof CompetitionType)[keyof typeof CompetitionType];
+
+export const CupRound = { QuarterFinal: 0, SemiFinal: 1, Final: 2 } as const;
+export type CupRound = (typeof CupRound)[keyof typeof CupRound];
 
 export interface Match {
   id: string;
+  leagueId: string;
+  competition: CompetitionType;
+  round: CupRound | null;        // yalnız kubok matçlarında
+  leg: number | null;            // 1 və ya 2 (final = 1)
+  tieId: string | null;          // eyni cütlüyün iki matçını birləşdirir
+  homePenalties: number | null;  // penalti seriyası olubsa
+  awayPenalties: number | null;
   weekNumber: number;
   homeTeamId: string;
   homeTeamName: string;
@@ -219,10 +246,13 @@ export interface LiveEvent {
   eventType: MatchEventType;
   teamId: string;
   description: string;
+  playerId: string | null;
+  assistPlayerId: string | null;
 }
 
 export interface LiveState {
   matchId: string;
+  leagueId: string;               // heyəti/cədvəli çəkmək üçün — axtarmağa ehtiyac yoxdur
   minute: number;                 // 0-90
   status: LiveMatchStatus;
   homeTeamId: string;
@@ -353,6 +383,115 @@ Manager Mode-da həftə **irəliləmir**, çünki istifadəçinin matçı hələ
 
 ### `DELETE /api/leagues/{leagueId}`
 Liqanı və bütün məlumatlarını silir. `204 No Content`.
+
+---
+
+### `GET /api/leagues/{leagueId}/statistics`
+
+Mövsümün bütün statistikası — **liqa və kubok matçları birlikdə**.
+
+```json
+{
+  "topScorers": [
+    { "rank": 1, "playerId": "...", "playerName": "Erling Haaland", "position": 3,
+      "teamId": "...", "teamName": "Manchester City",
+      "goals": 10, "assists": 2, "yellowCards": 1, "redCards": 0, "matchesPlayed": 17 }
+  ],
+  "topAssists": [ /* eyni struktur, assists-ə görə sıralanıb */ ],
+  "mostBooked": [ /* eyni struktur, vərəqələrə görə (qırmızı daha ağır) */ ],
+  "form": [
+    { "teamId": "...", "teamName": "Arsenal", "form": ["W", "L", "W", "D", "W"],
+      "goalsFor": 9, "goalsAgainst": 5, "pointsFromForm": 10 }
+  ],
+  "matchesPlayed": 69,
+  "totalGoals": 169,
+  "goalsPerMatch": 2.45,
+  "cleanSheets": 31,
+  "biggestWin": "Manchester City 5-1 Real Madrid"
+}
+```
+
+**`form` massivində ən yeni nəticə birincidir** (`["W","L",...]` = son matç qələbə).
+
+### `GET /api/leagues/{leagueId}/head-to-head?teamA={id}&teamB={id}`
+
+İki komandanın qarşılaşma tarixçəsi.
+
+```json
+{
+  "teamAId": "...", "teamAName": "Ajax",
+  "teamBId": "...", "teamBName": "Arsenal",
+  "teamAWins": 0, "draws": 1, "teamBWins": 1,
+  "teamAGoals": 3, "teamBGoals": 5,
+  "matches": [
+    { "matchId": "...", "weekNumber": 7, "homeTeamName": "Ajax",
+      "homeGoals": 2, "awayGoals": 2, "awayTeamName": "Arsenal" }
+  ]
+}
+```
+
+---
+
+## 4.5. Kubok turniri
+
+Liqa mövsümü bitəndən sonra 8 komanda arasında knockout turniri keçirilir.
+
+**Format:** 1/4 final → 1/2 final → final. İlk iki raund **ev-səfər** (2 matç), final **tək matç**. Bərabərlik halında **penalti seriyası**.
+
+### `POST /api/leagues/{leagueId}/cup/start`
+
+Kuboku başladır və 1/4 final püşkatmasını aparır. Yalnız `isFinished: true` olduqda işləyir, əks halda `409`.
+
+### `GET /api/leagues/{leagueId}/cup`
+
+Tam bracket:
+
+```json
+{
+  "started": true,
+  "finished": true,
+  "currentRound": null,
+  "winnerTeamId": "...",
+  "winnerTeamName": "Arsenal",
+  "ties": [
+    {
+      "tieId": "...",
+      "round": 0,
+      "homeTeamId": "...", "homeTeamName": "Chelsea",
+      "awayTeamId": "...", "awayTeamName": "Arsenal",
+      "homeAggregate": 3, "awayAggregate": 3,
+      "isComplete": true,
+      "winnerTeamId": "...",
+      "decidedOnPenalties": true,
+      "legs": [ /* MatchDto[] — 1-ci və 2-ci oyun */ ]
+    }
+  ]
+}
+```
+
+`round`: `0` = 1/4 final, `1` = 1/2 final, `2` = final.
+
+**Aggregate:** `homeAggregate`/`awayAggregate` **birinci oyunun ev sahibi** baxımındandır (ikinci oyunda meydan dəyişsə də).
+
+### `POST /api/leagues/{leagueId}/cup/play-round`
+
+Cari raundu oynayır. Manager Mode-da sizin cütlüyünüzün matçları oynanmır — `pendingUserMatch` qaytarılır və **canlı oynanmalıdır** (eyni `/api/matches/{id}/start-live` sistemi).
+
+```json
+{
+  "round": 0,
+  "simulatedMatches": [ /* MatchDto[] */ ],
+  "pendingUserMatch": { /* MatchDto və ya null */ },
+  "nextRound": 1,
+  "cupFinished": false,
+  "winnerTeamId": null,
+  "winnerTeamName": null
+}
+```
+
+> **Frontend məntiqi:** `pendingUserMatch` dolu olduqda raund tamamlanmır — istifadəçi matçını oynamalı, sonra `play-round` yenidən çağırılmalıdır. Bir cütlükdə 2 matç olduğu üçün bu, iki dəfə təkrarlana bilər.
+
+`409` — kubok hələ başlamayıbsa və ya artıq bitibsə.
 
 ---
 
@@ -727,10 +866,12 @@ Frontend planlaşdırarkən nəzərə alın — bunlar backend-də hələ yoxdur
 |---|---|
 | Komandanı sonradan dəyişmək | Liqa yaradılanda təyin olunur, dəyişmək üçün endpoint yoxdur |
 | Logo şəkilləri | `logoUrl` həmişə `null` — placeholder/initial göstərin |
-| Qol vuran oyunçunun adı | `MatchEvent.playerId` var, amma **doldurulmur** — yalnız komanda bilinir |
-| Sarı/qırmızı vərəqə | Enum-da var, generasiya olunmur |
-| Oyunçu statistikası | Qol kralı, assist və s. yoxdur |
+| Hazır statistika cədvəlləri | Qol kralı/assist siyahısı üçün endpoint yoxdur — `MatchEvent.playerId` üzərindən frontend özü hesablaya bilər |
+| Başlanğıc heyəti matçdan əvvəl seçmək | Yalnız matç gedərkən əvəzetmə mümkündür |
+| Penalti, avtoqol | Enum-da yer var, hələ generasiya olunmur |
 | Mövsümü yenidən başlatmaq | Yalnız liqanı silib yenisini yaratmaq olar |
 | Canlı matçın server restart-a davamlılığı | Sessiya yaddaşdadır — server yenidən başlasa, davam edən matç itir |
+
+**Artıq mövcuddur** (əvvəlki versiyada yox idi): qol vuran və assist edən oyunçu, sarı/qırmızı vərəqə, zədə, qapıçı xilası, qapı kənarına zərbə, oyunçu kondisiyası və cəza sistemi.
 
 Bunlardan hansısa lazım olsa, backend-ə əlavə edilə bilər — soruşun.

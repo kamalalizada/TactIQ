@@ -22,6 +22,11 @@ artifacts/
 *.nupkg
 *.snupkg
 
+## Working notes — kept local; API.md and PLAN.md are the shared docs
+FRONTEND.md
+DESIGN-PROMPT.md
+DESIGN-GAP.md
+
 ## Secrets — never commit these
 appsettings.Development.json
 appsettings.Local.json
