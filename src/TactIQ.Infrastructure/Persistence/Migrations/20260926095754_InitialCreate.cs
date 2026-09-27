@@ -53,21 +53,19 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Leagues",
+                name: "Seasons",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     UserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: false),
-                    SeasonName = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: false),
-                    TeamCount = table.Column<int>(type: "integer", nullable: false),
-                    CurrentWeek = table.Column<int>(type: "integer", nullable: false),
+                    Name = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: false),
                     GameMode = table.Column<int>(type: "integer", nullable: false),
                     UserTeamId = table.Column<Guid>(type: "uuid", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_Leagues", x => x.Id);
+                    table.PrimaryKey("PK_Seasons", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -177,21 +175,74 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "Competitions",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    SeasonId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: false),
+                    Country = table.Column<string>(type: "character varying(60)", maxLength: 60, nullable: true),
+                    Kind = table.Column<int>(type: "integer", nullable: false),
+                    TeamCount = table.Column<int>(type: "integer", nullable: false),
+                    CurrentWeek = table.Column<int>(type: "integer", nullable: false),
+                    CurrentRound = table.Column<int>(type: "integer", nullable: true),
+                    WinnerTeamId = table.Column<Guid>(type: "uuid", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Competitions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Competitions_Seasons_SeasonId",
+                        column: x => x.SeasonId,
+                        principalTable: "Seasons",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Teams",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    LeagueId = table.Column<Guid>(type: "uuid", nullable: false),
+                    SeasonId = table.Column<Guid>(type: "uuid", nullable: false),
                     Name = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: false),
-                    LogoUrl = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true)
+                    LogoUrl = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    Country = table.Column<string>(type: "character varying(60)", maxLength: 60, nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Teams", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Teams_Leagues_LeagueId",
-                        column: x => x.LeagueId,
-                        principalTable: "Leagues",
+                        name: "FK_Teams_Seasons_SeasonId",
+                        column: x => x.SeasonId,
+                        principalTable: "Seasons",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "CompetitionEntries",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    CompetitionId = table.Column<Guid>(type: "uuid", nullable: false),
+                    TeamId = table.Column<Guid>(type: "uuid", nullable: false),
+                    GroupName = table.Column<string>(type: "character varying(4)", maxLength: 4, nullable: true),
+                    Eliminated = table.Column<bool>(type: "boolean", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_CompetitionEntries", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_CompetitionEntries_Competitions_CompetitionId",
+                        column: x => x.CompetitionId,
+                        principalTable: "Competitions",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_CompetitionEntries_Teams_TeamId",
+                        column: x => x.TeamId,
+                        principalTable: "Teams",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -201,21 +252,27 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    LeagueId = table.Column<Guid>(type: "uuid", nullable: false),
+                    CompetitionId = table.Column<Guid>(type: "uuid", nullable: false),
                     WeekNumber = table.Column<int>(type: "integer", nullable: false),
+                    GroupName = table.Column<string>(type: "character varying(4)", maxLength: 4, nullable: true),
+                    Round = table.Column<int>(type: "integer", nullable: true),
+                    Leg = table.Column<int>(type: "integer", nullable: true),
+                    TieId = table.Column<Guid>(type: "uuid", nullable: true),
                     HomeTeamId = table.Column<Guid>(type: "uuid", nullable: false),
                     AwayTeamId = table.Column<Guid>(type: "uuid", nullable: false),
                     HomeGoals = table.Column<int>(type: "integer", nullable: false),
                     AwayGoals = table.Column<int>(type: "integer", nullable: false),
-                    IsPlayed = table.Column<bool>(type: "boolean", nullable: false)
+                    IsPlayed = table.Column<bool>(type: "boolean", nullable: false),
+                    HomePenalties = table.Column<int>(type: "integer", nullable: true),
+                    AwayPenalties = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Matches", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Matches_Leagues_LeagueId",
-                        column: x => x.LeagueId,
-                        principalTable: "Leagues",
+                        name: "FK_Matches_Competitions_CompetitionId",
+                        column: x => x.CompetitionId,
+                        principalTable: "Competitions",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
@@ -241,13 +298,20 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                     Name = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: false),
                     Position = table.Column<int>(type: "integer", nullable: false),
                     ShirtNumber = table.Column<int>(type: "integer", nullable: false),
+                    Age = table.Column<int>(type: "integer", nullable: false),
+                    Nationality = table.Column<string>(type: "character varying(60)", maxLength: 60, nullable: false),
                     Pace = table.Column<int>(type: "integer", nullable: false),
                     Shooting = table.Column<int>(type: "integer", nullable: false),
                     Passing = table.Column<int>(type: "integer", nullable: false),
                     Dribbling = table.Column<int>(type: "integer", nullable: false),
                     Defending = table.Column<int>(type: "integer", nullable: false),
                     Physical = table.Column<int>(type: "integer", nullable: false),
-                    IsStarter = table.Column<bool>(type: "boolean", nullable: false)
+                    IsStarter = table.Column<bool>(type: "boolean", nullable: false),
+                    Overall = table.Column<int>(type: "integer", nullable: false),
+                    Condition = table.Column<int>(type: "integer", nullable: false),
+                    MatchesInjured = table.Column<int>(type: "integer", nullable: false),
+                    MatchesSuspended = table.Column<int>(type: "integer", nullable: false),
+                    YellowCards = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -270,6 +334,7 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                     EventType = table.Column<int>(type: "integer", nullable: false),
                     TeamId = table.Column<Guid>(type: "uuid", nullable: false),
                     PlayerId = table.Column<Guid>(type: "uuid", nullable: true),
+                    AssistPlayerId = table.Column<Guid>(type: "uuid", nullable: true),
                     Description = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: false)
                 },
                 constraints: table =>
@@ -344,9 +409,20 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_Leagues_UserId",
-                table: "Leagues",
-                column: "UserId");
+                name: "IX_CompetitionEntries_CompetitionId_TeamId",
+                table: "CompetitionEntries",
+                columns: new[] { "CompetitionId", "TeamId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_CompetitionEntries_TeamId",
+                table: "CompetitionEntries",
+                column: "TeamId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Competitions_SeasonId_Kind",
+                table: "Competitions",
+                columns: new[] { "SeasonId", "Kind" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_Matches_AwayTeamId",
@@ -354,14 +430,19 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                 column: "AwayTeamId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Matches_CompetitionId_WeekNumber",
+                table: "Matches",
+                columns: new[] { "CompetitionId", "WeekNumber" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Matches_HomeTeamId",
                 table: "Matches",
                 column: "HomeTeamId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Matches_LeagueId_WeekNumber",
+                name: "IX_Matches_TieId",
                 table: "Matches",
-                columns: new[] { "LeagueId", "WeekNumber" });
+                column: "TieId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_MatchEvents_MatchId_Minute",
@@ -374,9 +455,14 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                 column: "TeamId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Teams_LeagueId",
+                name: "IX_Seasons_UserId",
+                table: "Seasons",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Teams_SeasonId_Country",
                 table: "Teams",
-                column: "LeagueId");
+                columns: new[] { "SeasonId", "Country" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_TeamTactics_MatchId_TeamId_Minute",
@@ -403,6 +489,9 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                 name: "AspNetUserTokens");
 
             migrationBuilder.DropTable(
+                name: "CompetitionEntries");
+
+            migrationBuilder.DropTable(
                 name: "MatchEvents");
 
             migrationBuilder.DropTable(
@@ -421,10 +510,13 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                 name: "Matches");
 
             migrationBuilder.DropTable(
+                name: "Competitions");
+
+            migrationBuilder.DropTable(
                 name: "Teams");
 
             migrationBuilder.DropTable(
-                name: "Leagues");
+                name: "Seasons");
         }
     }
 }

@@ -34,7 +34,8 @@ public record LiveEventDto(
 /// <summary>A single broadcast frame: where the match stands right now.</summary>
 public record LiveStateDto(
     Guid MatchId,
-    Guid LeagueId,
+    Guid SeasonId,
+    Guid CompetitionId,
     int Minute,
     LiveMatchStatus Status,
     Guid HomeTeamId,

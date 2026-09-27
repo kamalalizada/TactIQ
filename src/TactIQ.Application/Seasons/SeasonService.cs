@@ -1,0 +1,461 @@
+using Microsoft.EntityFrameworkCore;
+using TactIQ.Application.Abstractions;
+using TactIQ.Application.Scheduling;
+using TactIQ.Application.Seeding;
+using TactIQ.Application.Simulation;
+using TactIQ.Application.Standings;
+using TactIQ.Application.Statistics;
+using TactIQ.Domain.Entities;
+using TactIQ.Domain.Enums;
+
+namespace TactIQ.Application.Seasons;
+
+public class SeasonService(
+    IAppDbContext db,
+    IScheduleGenerator scheduleGenerator,
+    ITeamFactory teamFactory,
+    IMatchEngine matchEngine,
+    IStandingsCalculator standingsCalculator,
+    IStatisticsCalculator statisticsCalculator) : ISeasonService
+{
+    /// <summary>The domestic leagues every season is made up of.</summary>
+    private static readonly (string Country, string Name)[] Leagues =
+    [
+        ("England", "Premier League"),
+        ("Spain", "LaLiga"),
+        ("Turkey", "Super Lig")
+    ];
+
+    public async Task<SeasonSummaryDto> CreateAsync(string userId, CreateSeasonRequest request, CancellationToken ct = default)
+    {
+        var season = new Season
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Name = request.Name,
+            GameMode = request.GameMode,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        foreach (var (country, name) in Leagues)
+        {
+            var teams = teamFactory.CreateLeagueTeams(season.Id, country);
+            season.Teams.AddRange(teams);
+
+            var competition = new Competition
+            {
+                Id = Guid.NewGuid(),
+                SeasonId = season.Id,
+                Name = name,
+                Country = country,
+                Kind = CompetitionKind.League,
+                TeamCount = teams.Count,
+                CurrentWeek = 1
+            };
+
+            competition.Entries = teams
+                .Select(t => new CompetitionEntry { CompetitionId = competition.Id, TeamId = t.Id })
+                .ToList();
+
+            competition.Matches = scheduleGenerator
+                .Generate(teams.Select(t => t.Id).ToList())
+                .Select(f => new Match
+                {
+                    CompetitionId = competition.Id,
+                    WeekNumber = f.WeekNumber,
+                    HomeTeamId = f.HomeTeamId,
+                    AwayTeamId = f.AwayTeamId
+                })
+                .ToList();
+
+            season.Competitions.Add(competition);
+        }
+
+        if (request.GameMode == GameMode.ManagerMode)
+        {
+            season.UserTeamId = request.UserTeamId is { } requested && season.Teams.Any(t => t.Id == requested)
+                ? requested
+                : season.Teams[Random.Shared.Next(season.Teams.Count)].Id;
+        }
+
+        db.Seasons.Add(season);
+        await db.SaveChangesAsync(ct);
+
+        return await BuildSummaryAsync(season, ct);
+    }
+
+    public async Task<IReadOnlyList<SeasonSummaryDto>> ListAsync(string userId, CancellationToken ct = default)
+    {
+        var seasons = await db.Seasons
+            .AsNoTracking()
+            .Include(s => s.Competitions)
+            .Where(s => s.UserId == userId)
+            .OrderByDescending(s => s.CreatedAt)
+            .ToListAsync(ct);
+
+        var summaries = new List<SeasonSummaryDto>(seasons.Count);
+        foreach (var season in seasons)
+            summaries.Add(await BuildSummaryAsync(season, ct));
+
+        return summaries;
+    }
+
+    public async Task<SeasonSummaryDto?> GetAsync(string userId, Guid seasonId, CancellationToken ct = default)
+    {
+        var season = await db.Seasons
+            .AsNoTracking()
+            .Include(s => s.Competitions)
+            .FirstOrDefaultAsync(s => s.Id == seasonId && s.UserId == userId, ct);
+
+        return season is null ? null : await BuildSummaryAsync(season, ct);
+    }
+
+    public async Task<SeasonSummaryDto> SetUserTeamAsync(
+        string userId,
+        Guid seasonId,
+        Guid teamId,
+        CancellationToken ct = default)
+    {
+        var season = await EnsureSeasonAsync(userId, seasonId, tracked: true, ct);
+
+        if (season.GameMode != GameMode.ManagerMode)
+            throw new InvalidOperationException("Only a Manager Mode season has a club to pick.");
+
+        var team = await db.Teams
+            .FirstOrDefaultAsync(t => t.Id == teamId && t.SeasonId == seasonId, ct)
+            ?? throw new KeyNotFoundException($"Team {teamId} is not part of this season.");
+
+        // Switching after kick-off would leave played matches credited to a club
+        // the manager no longer runs, so the choice is locked once a week is in.
+        var alreadyStarted = await db.Matches
+            .AnyAsync(m => m.Competition.SeasonId == seasonId && m.IsPlayed, ct);
+
+        if (alreadyStarted)
+            throw new InvalidOperationException("The club can only be chosen before the season starts.");
+
+        season.UserTeamId = team.Id;
+        await db.SaveChangesAsync(ct);
+
+        return await BuildSummaryAsync(season, ct);
+    }
+
+    public async Task<IReadOnlyList<TeamDto>> GetTeamsAsync(string userId, Guid seasonId, string? country, CancellationToken ct = default)
+    {
+        await EnsureSeasonAsync(userId, seasonId, ct);
+
+        var query = db.Teams
+            .AsNoTracking()
+            .Include(t => t.Players)
+            .Where(t => t.SeasonId == seasonId);
+
+        if (!string.IsNullOrWhiteSpace(country))
+            query = query.Where(t => t.Country == country);
+
+        var teams = await query.ToListAsync(ct);
+
+        return teams
+            .OrderBy(t => t.Country)
+            .ThenBy(t => t.Name)
+            .Select(t => t.ToDto())
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<StandingsRowDto>> GetStandingsAsync(string userId, Guid competitionId, CancellationToken ct = default)
+    {
+        var competition = await OwnedCompetitionAsync(userId, competitionId, ct);
+
+        var teams = await EntrantsAsync(competition, ct);
+        var matches = await db.Matches
+            .AsNoTracking()
+            .Where(m => m.CompetitionId == competitionId)
+            .ToListAsync(ct);
+
+        var logos = teams.ToDictionary(t => t.Id, t => t.LogoUrl);
+
+        return standingsCalculator
+            .Calculate(teams, matches)
+            .Select(r => r.ToDto(logos.GetValueOrDefault(r.TeamId)))
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<MatchDto>> GetFixturesAsync(string userId, Guid competitionId, int? week, CancellationToken ct = default)
+    {
+        var competition = await OwnedCompetitionAsync(userId, competitionId, ct);
+
+        var query = db.Matches
+            .AsNoTracking()
+            .Include(m => m.Competition)
+            .Include(m => m.HomeTeam)
+            .Include(m => m.AwayTeam)
+            .Include(m => m.Events)
+            .Where(m => m.CompetitionId == competitionId);
+
+        if (week is { } w)
+            query = query.Where(m => m.WeekNumber == w);
+
+        var matches = await query.OrderBy(m => m.WeekNumber).ThenBy(m => m.Id).ToListAsync(ct);
+        var userTeamId = await UserTeamIdAsync(competition.SeasonId, ct);
+
+        return matches.Select(m => m.ToDto(userTeamId)).ToList();
+    }
+
+    public async Task<SimulateWeekResult> SimulateWeekAsync(
+        string userId,
+        Guid competitionId,
+        bool includeUserMatch = false,
+        CancellationToken ct = default)
+    {
+        var competition = await OwnedCompetitionAsync(userId, competitionId, tracked: true, ct);
+
+        if (competition.Kind != CompetitionKind.League)
+            throw new InvalidOperationException("Only a domestic league is played week by week.");
+
+        if (competition.IsFinished)
+            throw new InvalidOperationException("This league has already finished.");
+
+        var userTeamId = await UserTeamIdAsync(competition.SeasonId, ct);
+        var result = await PlayWeekAsync(competition, userTeamId, includeUserMatch, ct);
+
+        await db.SaveChangesAsync(ct);
+        return result;
+    }
+
+    public async Task<IReadOnlyList<SimulateWeekResult>> SimulateAllLeaguesAsync(
+        string userId,
+        Guid seasonId,
+        bool includeUserMatch = false,
+        CancellationToken ct = default)
+    {
+        var season = await EnsureSeasonAsync(userId, seasonId, tracked: true, ct);
+
+        var leagues = await db.Competitions
+            .Where(c => c.SeasonId == seasonId && c.Kind == CompetitionKind.League)
+            .ToListAsync(ct);
+
+        var results = new List<SimulateWeekResult>();
+
+        foreach (var competition in leagues.Where(c => !c.IsFinished))
+            results.Add(await PlayWeekAsync(competition, season.UserTeamId, includeUserMatch, ct));
+
+        await db.SaveChangesAsync(ct);
+        return results;
+    }
+
+    public async Task<LeagueStatisticsDto> GetStatisticsAsync(string userId, Guid seasonId, Guid? competitionId, CancellationToken ct = default)
+    {
+        await EnsureSeasonAsync(userId, seasonId, ct);
+
+        var teamQuery = db.Teams
+            .AsNoTracking()
+            .Include(t => t.Players)
+            .Where(t => t.SeasonId == seasonId);
+
+        var matchQuery = db.Matches
+            .AsNoTracking()
+            .Include(m => m.HomeTeam)
+            .Include(m => m.AwayTeam)
+            .Include(m => m.Events)
+            .Where(m => m.Competition.SeasonId == seasonId && m.IsPlayed);
+
+        if (competitionId is { } id)
+        {
+            // Narrow the squads too, or players from other leagues appear in the
+            // charts on nothing but an appearance count.
+            teamQuery = teamQuery.Where(t => db.CompetitionEntries.Any(e => e.CompetitionId == id && e.TeamId == t.Id));
+            matchQuery = matchQuery.Where(m => m.CompetitionId == id);
+        }
+
+        return statisticsCalculator.Calculate(
+            await teamQuery.ToListAsync(ct),
+            await matchQuery.ToListAsync(ct));
+    }
+
+    public async Task<HeadToHeadSummary> GetHeadToHeadAsync(string userId, Guid seasonId, Guid teamAId, Guid teamBId, CancellationToken ct = default)
+    {
+        await EnsureSeasonAsync(userId, seasonId, ct);
+
+        var teams = await db.Teams
+            .AsNoTracking()
+            .Where(t => t.SeasonId == seasonId && (t.Id == teamAId || t.Id == teamBId))
+            .ToListAsync(ct);
+
+        var teamA = teams.FirstOrDefault(t => t.Id == teamAId)
+                    ?? throw new KeyNotFoundException($"Team {teamAId} was not found.");
+        var teamB = teams.FirstOrDefault(t => t.Id == teamBId)
+                    ?? throw new KeyNotFoundException($"Team {teamBId} was not found.");
+
+        var matches = await db.Matches
+            .AsNoTracking()
+            .Include(m => m.HomeTeam)
+            .Include(m => m.AwayTeam)
+            .Where(m => m.Competition.SeasonId == seasonId && m.IsPlayed)
+            .ToListAsync(ct);
+
+        return statisticsCalculator.HeadToHead(teamA, teamB, matches);
+    }
+
+    public async Task<bool> DeleteAsync(string userId, Guid seasonId, CancellationToken ct = default)
+    {
+        var season = await db.Seasons.FirstOrDefaultAsync(s => s.Id == seasonId && s.UserId == userId, ct);
+        if (season is null)
+            return false;
+
+        db.Seasons.Remove(season);
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    /// <summary>Plays every fixture of the competition's current week, leaving the
+    /// manager's own match for them to play live.</summary>
+    private async Task<SimulateWeekResult> PlayWeekAsync(
+        Competition competition,
+        Guid? userTeamId,
+        bool includeUserMatch,
+        CancellationToken ct)
+    {
+        var week = competition.CurrentWeek;
+
+        var matches = await db.Matches
+            .Include(m => m.Competition)
+            .Include(m => m.HomeTeam).ThenInclude(t => t.Players)
+            .Include(m => m.AwayTeam).ThenInclude(t => t.Players)
+            .Include(m => m.Events)
+            .Where(m => m.CompetitionId == competition.Id && m.WeekNumber == week)
+            .ToListAsync(ct);
+
+        var simulated = new List<Match>();
+        Match? pendingUserMatch = null;
+
+        foreach (var match in matches)
+        {
+            // The manager's own match is normally left for them to play out
+            // live; when they ask for it to be settled, it is simulated too.
+            if (IsUserMatch(match, userTeamId) && !includeUserMatch)
+            {
+                pendingUserMatch = match;
+                continue;
+            }
+
+            if (!match.IsPlayed)
+                ApplyResult(match, matchEngine.SimulateInstant(match.HomeTeam, match.AwayTeam));
+
+            simulated.Add(match);
+        }
+
+        var weekComplete = pendingUserMatch is null || pendingUserMatch.IsPlayed;
+        if (weekComplete)
+        {
+            competition.CurrentWeek = week + 1;
+            await RecoverSquadsAsync(competition.SeasonId, ct);
+        }
+
+        return new SimulateWeekResult(
+            competition.Id,
+            week,
+            simulated.Select(m => m.ToDto(userTeamId)).ToList(),
+            pendingUserMatch?.IsPlayed == false ? pendingUserMatch.ToDto(userTeamId) : null,
+            competition.CurrentWeek,
+            competition.IsFinished);
+    }
+
+    private async Task RecoverSquadsAsync(Guid seasonId, CancellationToken ct)
+    {
+        var squads = await db.Players
+            .Where(p => db.Teams.Any(t => t.Id == p.TeamId && t.SeasonId == seasonId))
+            .ToListAsync(ct);
+
+        SquadAftermath.RecoverWeek(squads);
+    }
+
+    private static bool IsUserMatch(Match match, Guid? userTeamId) =>
+        userTeamId is not null && (match.HomeTeamId == userTeamId || match.AwayTeamId == userTeamId);
+
+    internal static void ApplyResult(Match match, MatchSimulationResult result)
+    {
+        match.HomeGoals = result.HomeGoals;
+        match.AwayGoals = result.AwayGoals;
+        match.IsPlayed = true;
+
+        foreach (var e in result.Events)
+        {
+            // Id and MatchId are left to EF: assigning them makes the change tracker
+            // treat these new rows as existing ones and emit UPDATEs instead of INSERTs.
+            match.Events.Add(new MatchEvent
+            {
+                Minute = e.Minute,
+                EventType = e.EventType,
+                TeamId = e.TeamId,
+                PlayerId = e.PlayerId,
+                AssistPlayerId = e.AssistPlayerId,
+                Description = e.Description
+            });
+        }
+
+        SquadAftermath.Apply(
+            match.HomeTeam.Players.Concat(match.AwayTeam.Players),
+            result.Aftermath);
+    }
+
+    private async Task<SeasonSummaryDto> BuildSummaryAsync(Season season, CancellationToken ct)
+    {
+        var winnerIds = season.Competitions
+            .Where(c => c.WinnerTeamId is not null)
+            .Select(c => c.WinnerTeamId!.Value)
+            .ToList();
+
+        if (season.UserTeamId is { } userTeam)
+            winnerIds.Add(userTeam);
+
+        var names = winnerIds.Count == 0
+            ? []
+            : await db.Teams
+                .AsNoTracking()
+                .Where(t => winnerIds.Contains(t.Id))
+                .ToDictionaryAsync(t => t.Id, t => t.Name, ct);
+
+        var competitions = season.Competitions
+            .OrderBy(c => c.Kind)
+            .ThenBy(c => c.Country)
+            .Select(c => c.ToSummary(c.WinnerTeamId is { } id ? names.GetValueOrDefault(id) : null))
+            .ToList();
+
+        var userTeamName = season.UserTeamId is { } team ? names.GetValueOrDefault(team) : null;
+
+        return season.ToSummary(userTeamName, competitions);
+    }
+
+    private async Task<List<Team>> EntrantsAsync(Competition competition, CancellationToken ct) =>
+        await db.Teams
+            .AsNoTracking()
+            .Where(t => db.CompetitionEntries.Any(e => e.CompetitionId == competition.Id && e.TeamId == t.Id))
+            .ToListAsync(ct);
+
+    private async Task<Guid?> UserTeamIdAsync(Guid seasonId, CancellationToken ct) =>
+        await db.Seasons
+            .AsNoTracking()
+            .Where(s => s.Id == seasonId)
+            .Select(s => s.UserTeamId)
+            .FirstOrDefaultAsync(ct);
+
+    private Task<Season> EnsureSeasonAsync(string userId, Guid seasonId, CancellationToken ct) =>
+        EnsureSeasonAsync(userId, seasonId, tracked: false, ct);
+
+    private async Task<Season> EnsureSeasonAsync(string userId, Guid seasonId, bool tracked, CancellationToken ct)
+    {
+        var query = tracked ? db.Seasons : db.Seasons.AsNoTracking();
+
+        return await query.FirstOrDefaultAsync(s => s.Id == seasonId && s.UserId == userId, ct)
+               ?? throw new KeyNotFoundException($"Season {seasonId} was not found.");
+    }
+
+    private Task<Competition> OwnedCompetitionAsync(string userId, Guid competitionId, CancellationToken ct) =>
+        OwnedCompetitionAsync(userId, competitionId, tracked: false, ct);
+
+    private async Task<Competition> OwnedCompetitionAsync(string userId, Guid competitionId, bool tracked, CancellationToken ct)
+    {
+        var query = tracked ? db.Competitions : db.Competitions.AsNoTracking();
+
+        return await query.FirstOrDefaultAsync(c => c.Id == competitionId && c.Season.UserId == userId, ct)
+               ?? throw new KeyNotFoundException($"Competition {competitionId} was not found.");
+    }
+}

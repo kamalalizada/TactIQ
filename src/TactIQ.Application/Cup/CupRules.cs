@@ -10,11 +10,19 @@ public record TieOutcome(Guid WinnerTeamId, bool DecidedOnPenalties, int HomeAgg
 
 public static class CupRules
 {
-    /// <summary>Teams still standing when the cup begins.</summary>
-    public const int EntrantCount = 8;
+    /// <summary>Clubs that qualify for the Champions League.</summary>
+    public const int EntrantCount = 16;
+
+    public const int GroupCount = 4;
+    public const int GroupSize = EntrantCount / GroupCount;
+
+    /// <summary>How many of each group go through to the knockout rounds.</summary>
+    public const int QualifiersPerGroup = 2;
 
     public static CupRound? NextRound(CupRound round) => round switch
     {
+        CupRound.GroupStage => CupRound.QuarterFinal,
+        CupRound.RoundOf16 => CupRound.QuarterFinal,
         CupRound.QuarterFinal => CupRound.SemiFinal,
         CupRound.SemiFinal => CupRound.Final,
         _ => null
@@ -22,6 +30,55 @@ public static class CupRules
 
     /// <summary>The final is a one-off; earlier rounds are home and away.</summary>
     public static bool IsTwoLegged(CupRound round) => round != CupRound.Final;
+
+    /// <summary>
+    /// Splits the qualifiers into groups, keeping clubs from one country apart
+    /// where possible so the draw does not put three English sides together.
+    /// </summary>
+    public static IReadOnlyDictionary<string, List<Guid>> DrawGroups(
+        IReadOnlyList<Team> teams,
+        Random random)
+    {
+        if (teams.Count != EntrantCount)
+            throw new ArgumentException($"The group stage needs exactly {EntrantCount} teams.", nameof(teams));
+
+        // Deal round-robin from each country in turn, so a country's clubs land
+        // in different groups before any group takes a second one.
+        var byCountry = teams
+            .GroupBy(t => t.Country)
+            .OrderByDescending(g => g.Count())
+            .Select(g => new Queue<Team>(g.OrderBy(_ => random.Next())))
+            .ToList();
+
+        var groups = Enumerable.Range(0, GroupCount)
+            .ToDictionary(i => ((char)('A' + i)).ToString(), _ => new List<Guid>());
+
+        var names = groups.Keys.ToList();
+        var countryOf = teams.ToDictionary(t => t.Id, t => t.Country);
+
+        while (byCountry.Any(q => q.Count > 0))
+        {
+            foreach (var queue in byCountry.Where(q => q.Count > 0).ToList())
+            {
+                var team = queue.Peek();
+
+                var open = names.Where(n => groups[n].Count < GroupSize).ToList();
+                if (open.Count == 0)
+                    break;
+
+                // Prefer a group with none of this country in it yet.
+                var target = open
+                    .OrderBy(n => groups[n].Count(id => countryOf[id] == team.Country))
+                    .ThenBy(n => groups[n].Count)
+                    .ThenBy(_ => random.Next())
+                    .First();
+
+                groups[target].Add(queue.Dequeue().Id);
+            }
+        }
+
+        return groups;
+    }
 
     /// <summary>Pairs the surviving teams at random for the given round.</summary>
     public static IReadOnlyList<CupTie> Draw(IReadOnlyList<Guid> teamIds, CupRound round, Random random)
@@ -109,11 +166,8 @@ public static class CupRules
         // Sudden death, capped so a freak run cannot loop forever.
         for (var extra = 0; extra < 20 && homeScore == awayScore; extra++)
         {
-            var homeScored = random.NextDouble() < homeSkill;
-            var awayScored = random.NextDouble() < awaySkill;
-
-            if (homeScored) homeScore++;
-            if (awayScored) awayScore++;
+            if (random.NextDouble() < homeSkill) homeScore++;
+            if (random.NextDouble() < awaySkill) awayScore++;
         }
 
         if (homeScore == awayScore)

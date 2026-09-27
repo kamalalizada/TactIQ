@@ -1,25 +1,41 @@
 using TactIQ.Domain.Enums;
 
-namespace TactIQ.Application.Leagues;
+namespace TactIQ.Application.Seasons;
 
-public record CreateLeagueRequest(string SeasonName, GameMode GameMode, Guid? UserTeamId);
+public record CreateSeasonRequest(string Name, GameMode GameMode, Guid? UserTeamId);
 
-public record LeagueSummaryDto(
+public record SetUserTeamRequest(Guid TeamId);
+
+public record CompetitionSummaryDto(
     Guid Id,
-    string SeasonName,
-    GameMode GameMode,
-    Guid? UserTeamId,
+    string Name,
+    string? Country,
+    CompetitionKind Kind,
     int TeamCount,
     int CurrentWeek,
     int TotalWeeks,
+    CupRound? CurrentRound,
+    Guid? WinnerTeamId,
+    string? WinnerTeamName,
+    bool IsFinished);
+
+public record SeasonSummaryDto(
+    Guid Id,
+    string Name,
+    GameMode GameMode,
+    Guid? UserTeamId,
+    string? UserTeamName,
     bool IsFinished,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    IReadOnlyList<CompetitionSummaryDto> Competitions);
 
 public record PlayerDto(
     Guid Id,
     string Name,
     Position Position,
     int ShirtNumber,
+    int Age,
+    string Nationality,
     int Pace,
     int Shooting,
     int Passing,
@@ -37,6 +53,7 @@ public record PlayerDto(
 public record TeamDto(
     Guid Id,
     string Name,
+    string Country,
     string? LogoUrl,
     double AttackRating,
     double DefenseRating,
@@ -53,18 +70,22 @@ public record MatchEventDto(
 
 public record MatchDto(
     Guid Id,
-    Guid LeagueId,
-    CompetitionType Competition,
+    Guid CompetitionId,
+    string CompetitionName,
+    CompetitionKind Kind,
+    int WeekNumber,
+    string? GroupName,
     CupRound? Round,
     int? Leg,
     Guid? TieId,
     int? HomePenalties,
     int? AwayPenalties,
-    int WeekNumber,
     Guid HomeTeamId,
     string HomeTeamName,
+    string? HomeTeamLogoUrl,
     Guid AwayTeamId,
     string AwayTeamName,
+    string? AwayTeamLogoUrl,
     int HomeGoals,
     int AwayGoals,
     bool IsPlayed,
@@ -75,6 +96,7 @@ public record StandingsRowDto(
     int Rank,
     Guid TeamId,
     string TeamName,
+    string? LogoUrl,
     int Played,
     int Won,
     int Drawn,
@@ -85,8 +107,9 @@ public record StandingsRowDto(
     int Points);
 
 public record SimulateWeekResult(
+    Guid CompetitionId,
     int WeekNumber,
     IReadOnlyList<MatchDto> SimulatedMatches,
     MatchDto? PendingUserMatch,
     int NextWeek,
-    bool SeasonFinished);
+    bool CompetitionFinished);

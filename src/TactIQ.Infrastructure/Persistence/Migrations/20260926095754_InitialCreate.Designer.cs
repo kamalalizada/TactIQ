@@ -12,8 +12,8 @@ using TactIQ.Infrastructure.Persistence;
 namespace TactIQ.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260923114102_AddPlayerConditionAndMatchDetail")]
-    partial class AddPlayerConditionAndMatchDetail
+    [Migration("20260926095754_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -157,42 +157,73 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
-            modelBuilder.Entity("TactIQ.Domain.Entities.League", b =>
+            modelBuilder.Entity("TactIQ.Domain.Entities.Competition", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<string>("Country")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<int?>("CurrentRound")
+                        .HasColumnType("integer");
 
                     b.Property<int>("CurrentWeek")
                         .HasColumnType("integer");
 
-                    b.Property<int>("GameMode")
+                    b.Property<int>("Kind")
                         .HasColumnType("integer");
 
-                    b.Property<string>("SeasonName")
+                    b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)");
 
+                    b.Property<Guid>("SeasonId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("TeamCount")
                         .HasColumnType("integer");
 
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)");
-
-                    b.Property<Guid?>("UserTeamId")
+                    b.Property<Guid?>("WinnerTeamId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("SeasonId", "Kind");
 
-                    b.ToTable("Leagues");
+                    b.ToTable("Competitions");
+                });
+
+            modelBuilder.Entity("TactIQ.Domain.Entities.CompetitionEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompetitionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Eliminated")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("GroupName")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<Guid>("TeamId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TeamId");
+
+                    b.HasIndex("CompetitionId", "TeamId")
+                        .IsUnique();
+
+                    b.ToTable("CompetitionEntries");
                 });
 
             modelBuilder.Entity("TactIQ.Domain.Entities.Match", b =>
@@ -204,10 +235,23 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                     b.Property<int>("AwayGoals")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("AwayPenalties")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("AwayTeamId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid>("CompetitionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("GroupName")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
                     b.Property<int>("HomeGoals")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("HomePenalties")
                         .HasColumnType("integer");
 
                     b.Property<Guid>("HomeTeamId")
@@ -216,7 +260,13 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsPlayed")
                         .HasColumnType("boolean");
 
-                    b.Property<Guid>("LeagueId")
+                    b.Property<int?>("Leg")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Round")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("TieId")
                         .HasColumnType("uuid");
 
                     b.Property<int>("WeekNumber")
@@ -228,7 +278,9 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("HomeTeamId");
 
-                    b.HasIndex("LeagueId", "WeekNumber");
+                    b.HasIndex("TieId");
+
+                    b.HasIndex("CompetitionId", "WeekNumber");
 
                     b.ToTable("Matches");
                 });
@@ -275,6 +327,9 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("Age")
+                        .HasColumnType("integer");
+
                     b.Property<int>("Condition")
                         .HasColumnType("integer");
 
@@ -297,6 +352,11 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)");
+
+                    b.Property<string>("Nationality")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
 
                     b.Property<int>("Overall")
                         .HasColumnType("integer");
@@ -332,14 +392,48 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                     b.ToTable("Players");
                 });
 
+            modelBuilder.Entity("TactIQ.Domain.Entities.Season", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("GameMode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<Guid?>("UserTeamId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Seasons");
+                });
+
             modelBuilder.Entity("TactIQ.Domain.Entities.Team", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("LeagueId")
-                        .HasColumnType("uuid");
+                    b.Property<string>("Country")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
 
                     b.Property<string>("LogoUrl")
                         .HasMaxLength(500)
@@ -350,9 +444,12 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)");
 
+                    b.Property<Guid>("SeasonId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("LeagueId");
+                    b.HasIndex("SeasonId", "Country");
 
                     b.ToTable("Teams");
                 });
@@ -508,6 +605,36 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("TactIQ.Domain.Entities.Competition", b =>
+                {
+                    b.HasOne("TactIQ.Domain.Entities.Season", "Season")
+                        .WithMany("Competitions")
+                        .HasForeignKey("SeasonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Season");
+                });
+
+            modelBuilder.Entity("TactIQ.Domain.Entities.CompetitionEntry", b =>
+                {
+                    b.HasOne("TactIQ.Domain.Entities.Competition", "Competition")
+                        .WithMany("Entries")
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TactIQ.Domain.Entities.Team", "Team")
+                        .WithMany()
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Competition");
+
+                    b.Navigation("Team");
+                });
+
             modelBuilder.Entity("TactIQ.Domain.Entities.Match", b =>
                 {
                     b.HasOne("TactIQ.Domain.Entities.Team", "AwayTeam")
@@ -516,23 +643,23 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("TactIQ.Domain.Entities.Competition", "Competition")
+                        .WithMany("Matches")
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("TactIQ.Domain.Entities.Team", "HomeTeam")
                         .WithMany()
                         .HasForeignKey("HomeTeamId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("TactIQ.Domain.Entities.League", "League")
-                        .WithMany("Matches")
-                        .HasForeignKey("LeagueId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.Navigation("AwayTeam");
 
-                    b.Navigation("HomeTeam");
+                    b.Navigation("Competition");
 
-                    b.Navigation("League");
+                    b.Navigation("HomeTeam");
                 });
 
             modelBuilder.Entity("TactIQ.Domain.Entities.MatchEvent", b =>
@@ -559,13 +686,13 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("TactIQ.Domain.Entities.Team", b =>
                 {
-                    b.HasOne("TactIQ.Domain.Entities.League", "League")
+                    b.HasOne("TactIQ.Domain.Entities.Season", "Season")
                         .WithMany("Teams")
-                        .HasForeignKey("LeagueId")
+                        .HasForeignKey("SeasonId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("League");
+                    b.Navigation("Season");
                 });
 
             modelBuilder.Entity("TactIQ.Domain.Entities.TeamTactics", b =>
@@ -579,11 +706,11 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                     b.Navigation("Match");
                 });
 
-            modelBuilder.Entity("TactIQ.Domain.Entities.League", b =>
+            modelBuilder.Entity("TactIQ.Domain.Entities.Competition", b =>
                 {
-                    b.Navigation("Matches");
+                    b.Navigation("Entries");
 
-                    b.Navigation("Teams");
+                    b.Navigation("Matches");
                 });
 
             modelBuilder.Entity("TactIQ.Domain.Entities.Match", b =>
@@ -591,6 +718,13 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                     b.Navigation("Events");
 
                     b.Navigation("Tactics");
+                });
+
+            modelBuilder.Entity("TactIQ.Domain.Entities.Season", b =>
+                {
+                    b.Navigation("Competitions");
+
+                    b.Navigation("Teams");
                 });
 
             modelBuilder.Entity("TactIQ.Domain.Entities.Team", b =>

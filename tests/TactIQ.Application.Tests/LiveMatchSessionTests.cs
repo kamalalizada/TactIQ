@@ -22,7 +22,8 @@ public class LiveMatchSessionTests
         var match = new Match
         {
             Id = Guid.NewGuid(),
-            LeagueId = Guid.NewGuid(),
+            CompetitionId = Guid.NewGuid(),
+            Competition = new Competition { SeasonId = Guid.NewGuid() },
             HomeTeamId = home.Id,
             AwayTeamId = away.Id,
             HomeTeam = home,
@@ -147,6 +148,7 @@ public class LiveMatchSessionTests
             var match = new Match
             {
                 Id = Guid.NewGuid(),
+                Competition = new Competition { SeasonId = Guid.NewGuid() },
                 HomeTeamId = home.Id,
                 AwayTeamId = away.Id,
                 HomeTeam = home,

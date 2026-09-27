@@ -1,6 +1,5 @@
 using System.Reflection;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace TactIQ.Application.Seeding;
 
@@ -10,6 +9,8 @@ public record SquadPlayer(
     int ShirtNumber,
     bool IsStarter,
     int Overall,
+    int Age,
+    string Nationality,
     int Pace,
     int Shooting,
     int Passing,
@@ -17,7 +18,13 @@ public record SquadPlayer(
     int Defending,
     int Physical);
 
-public record Squad(string Name, int Strength, IReadOnlyList<SquadPlayer> Players);
+public record Squad(
+    string Name,
+    string Country,
+    string League,
+    string? LogoUrl,
+    int Strength,
+    IReadOnlyList<SquadPlayer> Players);
 
 /// <summary>Real club squads, embedded so seeding needs no external files at runtime.</summary>
 public static class SquadData
@@ -28,16 +35,21 @@ public static class SquadData
 
     public static IReadOnlyList<Squad> All => Cache.Value;
 
+    /// <summary>Clubs of one domestic league, strongest first.</summary>
+    public static IReadOnlyList<Squad> ForCountry(string country) =>
+        All.Where(s => string.Equals(s.Country, country, StringComparison.OrdinalIgnoreCase))
+           .OrderByDescending(s => s.Strength)
+           .ToList();
+
+    public static IReadOnlyList<string> Countries =>
+        All.Select(s => s.Country).Distinct().OrderBy(c => c).ToList();
+
     private static IReadOnlyList<Squad> Load()
     {
         using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(ResourceName)
             ?? throw new InvalidOperationException($"Embedded resource '{ResourceName}' was not found.");
 
-        var options = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-            Converters = { new JsonStringEnumConverter() }
-        };
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
         return JsonSerializer.Deserialize<List<Squad>>(stream, options)
                ?? throw new InvalidOperationException("Squad data could not be read.");

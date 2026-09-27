@@ -2,7 +2,9 @@ namespace TactIQ.Domain.Enums;
 
 public enum CupRound
 {
-    QuarterFinal = 0,
-    SemiFinal = 1,
-    Final = 2
+    GroupStage = 0,
+    RoundOf16 = 1,
+    QuarterFinal = 2,
+    SemiFinal = 3,
+    Final = 4
 }

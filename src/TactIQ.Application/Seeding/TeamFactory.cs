@@ -7,7 +7,18 @@ public class TeamFactory(Random? random = null) : ITeamFactory
 {
     private readonly Random _random = random ?? Random.Shared;
 
-    public List<Team> CreateTeams(Guid leagueId, int teamCount)
+    /// <summary>Every club of one domestic league, ready to be added to a season.</summary>
+    public List<Team> CreateLeagueTeams(Guid seasonId, string country)
+    {
+        var squads = SquadData.ForCountry(country);
+
+        if (squads.Count == 0)
+            throw new ArgumentException($"No clubs are available for '{country}'.", nameof(country));
+
+        return squads.Select(squad => CreateTeam(seasonId, squad)).ToList();
+    }
+
+    public List<Team> CreateTeams(Guid seasonId, int teamCount)
     {
         var available = SquadData.All;
 
@@ -17,17 +28,19 @@ public class TeamFactory(Random? random = null) : ITeamFactory
         return available
             .OrderBy(_ => _random.Next())
             .Take(teamCount)
-            .Select(squad => CreateTeam(leagueId, squad))
+            .Select(squad => CreateTeam(seasonId, squad))
             .ToList();
     }
 
-    private static Team CreateTeam(Guid leagueId, Squad squad)
+    private static Team CreateTeam(Guid seasonId, Squad squad)
     {
         var team = new Team
         {
             Id = Guid.NewGuid(),
-            LeagueId = leagueId,
-            Name = squad.Name
+            SeasonId = seasonId,
+            Name = squad.Name,
+            Country = squad.Country,
+            LogoUrl = squad.LogoUrl
         };
 
         team.Players = squad.Players
@@ -40,6 +53,8 @@ public class TeamFactory(Random? random = null) : ITeamFactory
                 ShirtNumber = p.ShirtNumber,
                 IsStarter = p.IsStarter,
                 Overall = p.Overall,
+                Age = p.Age,
+                Nationality = p.Nationality,
                 Pace = p.Pace,
                 Shooting = p.Shooting,
                 Passing = p.Passing,

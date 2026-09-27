@@ -12,6 +12,9 @@ public class Player
     public Position Position { get; set; }
     public int ShirtNumber { get; set; }
 
+    public int Age { get; set; }
+    public string Nationality { get; set; } = string.Empty;
+
     public int Pace { get; set; }
     public int Shooting { get; set; }
     public int Passing { get; set; }

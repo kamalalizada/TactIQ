@@ -5,13 +5,15 @@ namespace TactIQ.Domain.Entities;
 public class Match
 {
     public Guid Id { get; set; }
-    public Guid LeagueId { get; set; }
-    public League League { get; set; } = null!;
 
-    public CompetitionType Competition { get; set; } = CompetitionType.League;
+    public Guid CompetitionId { get; set; }
+    public Competition Competition { get; set; } = null!;
 
     /// <summary>League week, or the leg number for a cup tie.</summary>
     public int WeekNumber { get; set; }
+
+    /// <summary>Group letter during a Champions League group stage.</summary>
+    public string? GroupName { get; set; }
 
     /// <summary>Set on cup ties only.</summary>
     public CupRound? Round { get; set; }

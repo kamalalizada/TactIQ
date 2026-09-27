@@ -4,5 +4,9 @@ namespace TactIQ.Application.Seeding;
 
 public interface ITeamFactory
 {
-    List<Team> CreateTeams(Guid leagueId, int teamCount);
+    /// <summary>Every club of one domestic league.</summary>
+    List<Team> CreateLeagueTeams(Guid seasonId, string country);
+
+    /// <summary>An arbitrary set of clubs, used by tests and smaller leagues.</summary>
+    List<Team> CreateTeams(Guid seasonId, int teamCount);
 }

@@ -1,82 +1,206 @@
 using Microsoft.EntityFrameworkCore;
 using TactIQ.Application.Abstractions;
-using TactIQ.Application.Leagues;
+using TactIQ.Application.Scheduling;
+using TactIQ.Application.Seasons;
 using TactIQ.Application.Simulation;
+using TactIQ.Application.Standings;
 using TactIQ.Domain.Entities;
 using TactIQ.Domain.Enums;
 
 namespace TactIQ.Application.Cup;
 
-public class CupService(IAppDbContext db, IMatchEngine matchEngine) : ICupService
+public class CupService(
+    IAppDbContext db,
+    IMatchEngine matchEngine,
+    IScheduleGenerator scheduleGenerator,
+    IStandingsCalculator standingsCalculator) : ICupService
 {
+    private const string CompetitionName = "Champions League";
+
     private readonly Random _random = new();
 
-    public async Task<CupBracketDto> StartAsync(string userId, Guid leagueId, CancellationToken ct = default)
+    public async Task<CupBracketDto> StartAsync(string userId, Guid seasonId, CancellationToken ct = default)
     {
-        var league = await OwnedLeagueAsync(userId, leagueId, ct);
+        var season = await OwnedSeasonAsync(userId, seasonId, ct);
 
-        if (!league.IsFinished)
-            throw new InvalidOperationException("The cup starts once the league season is over.");
+        var existing = season.Competitions.FirstOrDefault(c => c.Kind == CompetitionKind.ChampionsLeague);
+        if (existing is not null)
+            return await GetBracketAsync(userId, seasonId, ct);
 
-        if (league.CupStarted)
-            return await GetBracketAsync(userId, leagueId, ct);
+        var leagues = season.Competitions.Where(c => c.Kind == CompetitionKind.League).ToList();
+        if (leagues.Count == 0 || leagues.Any(l => !l.IsFinished))
+            throw new InvalidOperationException("Every domestic league must finish before the Champions League starts.");
 
-        var teamIds = await db.Teams
-            .Where(t => t.LeagueId == leagueId)
-            .Select(t => t.Id)
-            .ToListAsync(ct);
+        var qualifiers = await QualifiersAsync(leagues, ct);
 
-        if (teamIds.Count != CupRules.EntrantCount)
-            throw new InvalidOperationException($"The cup needs exactly {CupRules.EntrantCount} teams.");
+        var competition = new Competition
+        {
+            Id = Guid.NewGuid(),
+            SeasonId = season.Id,
+            Name = CompetitionName,
+            Kind = CompetitionKind.ChampionsLeague,
+            TeamCount = qualifiers.Count,
+            CurrentRound = CupRound.GroupStage,
+            CurrentWeek = 1
+        };
 
-        CreateRound(league, CupRules.Draw(teamIds, CupRound.QuarterFinal, _random));
-        league.CurrentCupRound = CupRound.QuarterFinal;
+        var groups = CupRules.DrawGroups(qualifiers, _random);
 
+        foreach (var (name, teamIds) in groups)
+        {
+            competition.Entries.AddRange(teamIds.Select(id => new CompetitionEntry
+            {
+                CompetitionId = competition.Id,
+                TeamId = id,
+                GroupName = name
+            }));
+
+            // Each group is its own small double round-robin.
+            competition.Matches.AddRange(scheduleGenerator
+                .Generate(teamIds)
+                .Select(f => new Match
+                {
+                    CompetitionId = competition.Id,
+                    WeekNumber = f.WeekNumber,
+                    GroupName = name,
+                    Round = CupRound.GroupStage,
+                    HomeTeamId = f.HomeTeamId,
+                    AwayTeamId = f.AwayTeamId
+                }));
+        }
+
+        season.Competitions.Add(competition);
         await db.SaveChangesAsync(ct);
-        return await GetBracketAsync(userId, leagueId, ct);
+
+        return await GetBracketAsync(userId, seasonId, ct);
     }
 
-    public async Task<CupBracketDto> GetBracketAsync(string userId, Guid leagueId, CancellationToken ct = default)
+    public async Task<CupBracketDto> GetBracketAsync(string userId, Guid seasonId, CancellationToken ct = default)
     {
-        var league = await OwnedLeagueAsync(userId, leagueId, ct);
-        var matches = await CupMatchesAsync(leagueId, ct);
+        var season = await OwnedSeasonAsync(userId, seasonId, ct);
+
+        var competition = season.Competitions.FirstOrDefault(c => c.Kind == CompetitionKind.ChampionsLeague);
+        if (competition is null)
+        {
+            return new CupBracketDto(Guid.Empty, CompetitionName, false, false, null, null, null, [], []);
+        }
+
+        var matches = await CupMatchesAsync(competition.Id, ct);
+        var entries = await db.CompetitionEntries
+            .AsNoTracking()
+            .Where(e => e.CompetitionId == competition.Id)
+            .ToListAsync(ct);
+
+        var teams = await EntrantTeamsAsync(competition.Id, ct);
+        var teamById = teams.ToDictionary(t => t.Id);
+
+        var groups = BuildGroups(entries, matches, teamById);
 
         var ties = matches
             .Where(m => m.TieId is not null)
             .GroupBy(m => m.TieId!.Value)
-            .Select(g => BuildTie(g.Key, g.ToList(), league.UserTeamId))
+            .Select(g => BuildTie(g.Key, g.ToList(), season.UserTeamId, teamById))
             .OrderBy(t => t.Round)
             .ToList();
 
-        var winnerName = league.CupWinnerTeamId is { } winnerId
-            ? matches.SelectMany(m => new[] { m.HomeTeam, m.AwayTeam })
-                     .FirstOrDefault(t => t?.Id == winnerId)?.Name
+        var winnerName = competition.WinnerTeamId is { } winnerId
+            ? teamById.GetValueOrDefault(winnerId)?.Name
             : null;
 
         return new CupBracketDto(
-            league.CupStarted,
-            league.CupFinished,
-            league.CurrentCupRound,
-            league.CupWinnerTeamId,
+            competition.Id,
+            competition.Name,
+            true,
+            competition.IsFinished,
+            competition.CurrentRound,
+            competition.WinnerTeamId,
             winnerName,
+            groups,
             ties);
     }
 
-    public async Task<CupRoundResult> PlayRoundAsync(string userId, Guid leagueId, CancellationToken ct = default)
+    public async Task<CupRoundResult> PlayRoundAsync(string userId, Guid seasonId, CancellationToken ct = default)
     {
-        var league = await OwnedLeagueAsync(userId, leagueId, ct);
+        var season = await OwnedSeasonAsync(userId, seasonId, tracked: true, ct);
 
-        if (!league.CupStarted)
-            throw new InvalidOperationException("The cup has not been drawn yet.");
+        var competition = season.Competitions.FirstOrDefault(c => c.Kind == CompetitionKind.ChampionsLeague)
+                          ?? throw new InvalidOperationException("The Champions League has not been drawn yet.");
 
-        if (league.CurrentCupRound is not { } round)
-            throw new InvalidOperationException("The cup is already finished.");
+        if (competition.CurrentRound is not { } round)
+            throw new InvalidOperationException("The Champions League is already finished.");
 
-        var matches = await CupMatchesAsync(leagueId, ct);
+        var matches = await CupMatchesAsync(competition.Id, tracked: true, ct);
+
+        return round == CupRound.GroupStage
+            ? await PlayGroupWeekAsync(season, competition, matches, ct)
+            : await PlayKnockoutRoundAsync(season, competition, matches, round, ct);
+    }
+
+    /// <summary>Group games run a week at a time so the manager can play their own.</summary>
+    private async Task<CupRoundResult> PlayGroupWeekAsync(
+        Season season,
+        Competition competition,
+        List<Match> matches,
+        CancellationToken ct)
+    {
+        var week = competition.CurrentWeek;
+        var thisWeek = matches.Where(m => m.Round == CupRound.GroupStage && m.WeekNumber == week).ToList();
+
+        var simulated = new List<Match>();
+        Match? pending = null;
+
+        foreach (var match in thisWeek)
+        {
+            if (IsUserMatch(match, season.UserTeamId))
+            {
+                pending = match;
+                continue;
+            }
+
+            if (!match.IsPlayed)
+                SeasonService.ApplyResult(match, matchEngine.SimulateInstant(match.HomeTeam, match.AwayTeam));
+
+            simulated.Add(match);
+        }
+
+        var weekComplete = pending is null || pending.IsPlayed;
+        CupRound? nextRound = CupRound.GroupStage;
+
+        if (weekComplete)
+        {
+            competition.CurrentWeek = week + 1;
+
+            var groupsFinished = matches
+                .Where(m => m.Round == CupRound.GroupStage)
+                .All(m => m.IsPlayed);
+
+            if (groupsFinished)
+                nextRound = await StartKnockoutAsync(competition, matches, ct);
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        return new CupRoundResult(
+            CupRound.GroupStage,
+            simulated.Select(m => m.ToDto(season.UserTeamId)).ToList(),
+            pending?.IsPlayed == false ? pending.ToDto(season.UserTeamId) : null,
+            nextRound,
+            competition.IsFinished,
+            competition.WinnerTeamId,
+            null);
+    }
+
+    private async Task<CupRoundResult> PlayKnockoutRoundAsync(
+        Season season,
+        Competition competition,
+        List<Match> matches,
+        CupRound round,
+        CancellationToken ct)
+    {
         var roundMatches = matches.Where(m => m.Round == round).ToList();
 
         var simulated = new List<Match>();
-        Match? pendingUserMatch = null;
+        Match? pending = null;
 
         foreach (var match in roundMatches.OrderBy(m => m.Leg ?? 1))
         {
@@ -86,49 +210,74 @@ public class CupService(IAppDbContext db, IMatchEngine matchEngine) : ICupServic
                 continue;
             }
 
-            if (IsUserMatch(match, league.UserTeamId))
+            if (IsUserMatch(match, season.UserTeamId))
             {
-                // The manager plays their own tie live, exactly as in the league.
-                pendingUserMatch ??= match;
+                pending ??= match;
                 continue;
             }
 
-            Play(match);
+            SeasonService.ApplyResult(match, matchEngine.SimulateInstant(match.HomeTeam, match.AwayTeam));
             simulated.Add(match);
         }
 
-        var roundComplete = roundMatches.All(m => m.IsPlayed);
         CupRound? nextRound = round;
 
-        if (roundComplete)
+        if (roundMatches.All(m => m.IsPlayed))
         {
             SettleLevelTies(roundMatches);
-            nextRound = await AdvanceAsync(league, round, roundMatches, ct);
+            nextRound = AdvanceWinners(competition, round, roundMatches);
         }
 
         await db.SaveChangesAsync(ct);
 
-        var winnerName = league.CupWinnerTeamId is { } id
-            ? roundMatches.SelectMany(m => new[] { m.HomeTeam, m.AwayTeam })
-                          .FirstOrDefault(t => t?.Id == id)?.Name
+        var teams = await EntrantTeamsAsync(competition.Id, ct);
+        var winnerName = competition.WinnerTeamId is { } id
+            ? teams.FirstOrDefault(t => t.Id == id)?.Name
             : null;
 
         return new CupRoundResult(
             round,
-            simulated.Select(m => m.ToDto(league.UserTeamId)).ToList(),
-            pendingUserMatch?.ToDto(league.UserTeamId),
+            simulated.Select(m => m.ToDto(season.UserTeamId)).ToList(),
+            pending?.ToDto(season.UserTeamId),
             nextRound,
-            league.CupFinished,
-            league.CupWinnerTeamId,
+            competition.IsFinished,
+            competition.WinnerTeamId,
             winnerName);
     }
 
-    /// <summary>Called once every leg of a round is in, to move the winners on.</summary>
-    private async Task<CupRound?> AdvanceAsync(
-        League league,
-        CupRound round,
-        List<Match> roundMatches,
-        CancellationToken ct)
+    /// <summary>Takes the top two of every group into the quarter-finals.</summary>
+    private async Task<CupRound?> StartKnockoutAsync(Competition competition, List<Match> matches, CancellationToken ct)
+    {
+        var entries = await db.CompetitionEntries
+            .Where(e => e.CompetitionId == competition.Id)
+            .ToListAsync(ct);
+
+        var teams = await EntrantTeamsAsync(competition.Id, ct);
+        var teamById = teams.ToDictionary(t => t.Id);
+
+        var qualifiers = new List<Guid>();
+
+        foreach (var group in entries.GroupBy(e => e.GroupName))
+        {
+            var groupTeams = group.Select(e => teamById[e.TeamId]).ToList();
+            var groupMatches = matches.Where(m => m.GroupName == group.Key).ToList();
+
+            var table = standingsCalculator.Calculate(groupTeams, groupMatches);
+            var through = table.Take(CupRules.QualifiersPerGroup).Select(r => r.TeamId).ToList();
+
+            qualifiers.AddRange(through);
+
+            foreach (var entry in group.Where(e => !through.Contains(e.TeamId)))
+                entry.Eliminated = true;
+        }
+
+        CreateRound(competition, CupRules.Draw(qualifiers, CupRound.QuarterFinal, _random));
+        competition.CurrentRound = CupRound.QuarterFinal;
+
+        return CupRound.QuarterFinal;
+    }
+
+    private CupRound? AdvanceWinners(Competition competition, CupRound round, List<Match> roundMatches)
     {
         var winners = roundMatches
             .Where(m => m.TieId is not null)
@@ -140,15 +289,13 @@ public class CupService(IAppDbContext db, IMatchEngine matchEngine) : ICupServic
 
         if (next is null)
         {
-            league.CupWinnerTeamId = winners.Single();
-            league.CurrentCupRound = null;
+            competition.WinnerTeamId = winners.Single();
+            competition.CurrentRound = null;
             return null;
         }
 
-        CreateRound(league, CupRules.Draw(winners, next.Value, _random));
-        league.CurrentCupRound = next;
-
-        await Task.CompletedTask;
+        CreateRound(competition, CupRules.Draw(winners, next.Value, _random));
+        competition.CurrentRound = next;
         return next;
     }
 
@@ -164,52 +311,36 @@ public class CupService(IAppDbContext db, IMatchEngine matchEngine) : ICupServic
                 continue;
 
             var firstLeg = legs.OrderBy(m => m.Leg ?? 1).First();
-            var homeAggregate = 0;
-            var awayAggregate = 0;
+            var (home, away) = Aggregate(legs, firstLeg.HomeTeamId);
 
-            foreach (var leg in legs)
-            {
-                if (leg.HomeTeamId == firstLeg.HomeTeamId)
-                {
-                    homeAggregate += leg.HomeGoals;
-                    awayAggregate += leg.AwayGoals;
-                }
-                else
-                {
-                    homeAggregate += leg.AwayGoals;
-                    awayAggregate += leg.HomeGoals;
-                }
-            }
-
-            if (homeAggregate != awayAggregate)
+            if (home != away)
                 continue;
 
-            var (home, away) = CupRules.TakePenalties(decider.HomeTeam, decider.AwayTeam, _random);
-            decider.HomePenalties = home;
-            decider.AwayPenalties = away;
+            var (homePens, awayPens) = CupRules.TakePenalties(decider.HomeTeam, decider.AwayTeam, _random);
+            decider.HomePenalties = homePens;
+            decider.AwayPenalties = awayPens;
         }
     }
 
-    private void CreateRound(League league, IReadOnlyList<CupTie> ties)
+    private static void CreateRound(Competition competition, IReadOnlyList<CupTie> ties)
     {
         foreach (var tie in ties)
         {
-            league.Matches.Add(NewCupMatch(league.Id, tie, leg: 1,
+            competition.Matches.Add(NewCupMatch(competition.Id, tie, leg: 1,
                 homeTeamId: tie.FirstLegHomeTeamId, awayTeamId: tie.FirstLegAwayTeamId));
 
             if (CupRules.IsTwoLegged(tie.Round))
             {
                 // Second leg flips the venue.
-                league.Matches.Add(NewCupMatch(league.Id, tie, leg: 2,
+                competition.Matches.Add(NewCupMatch(competition.Id, tie, leg: 2,
                     homeTeamId: tie.FirstLegAwayTeamId, awayTeamId: tie.FirstLegHomeTeamId));
             }
         }
     }
 
-    private static Match NewCupMatch(Guid leagueId, CupTie tie, int leg, Guid homeTeamId, Guid awayTeamId) => new()
+    private static Match NewCupMatch(Guid competitionId, CupTie tie, int leg, Guid homeTeamId, Guid awayTeamId) => new()
     {
-        LeagueId = leagueId,
-        Competition = CompetitionType.Cup,
+        CompetitionId = competitionId,
         Round = tie.Round,
         Leg = leg,
         TieId = tie.TieId,
@@ -218,53 +349,94 @@ public class CupService(IAppDbContext db, IMatchEngine matchEngine) : ICupServic
         AwayTeamId = awayTeamId
     };
 
-    private void Play(Match match)
+    /// <summary>The leading clubs of every league, filling the bracket evenly.</summary>
+    private async Task<List<Team>> QualifiersAsync(List<Competition> leagues, CancellationToken ct)
     {
-        var result = matchEngine.SimulateInstant(match.HomeTeam, match.AwayTeam);
+        var perLeague = CupRules.EntrantCount / leagues.Count;
+        var remainder = CupRules.EntrantCount % leagues.Count;
 
-        match.HomeGoals = result.HomeGoals;
-        match.AwayGoals = result.AwayGoals;
-        match.IsPlayed = true;
+        var qualifiers = new List<Team>();
 
-        foreach (var e in result.Events)
+        // Stronger leagues, by average club rating, get the spare places.
+        var ordered = new List<(Competition Competition, List<Team> Teams)>();
+
+        foreach (var league in leagues)
         {
-            match.Events.Add(new MatchEvent
-            {
-                Minute = e.Minute,
-                EventType = e.EventType,
-                TeamId = e.TeamId,
-                PlayerId = e.PlayerId,
-                AssistPlayerId = e.AssistPlayerId,
-                Description = e.Description
-            });
+            var teams = await db.Teams
+                .Include(t => t.Players)
+                .Where(t => db.CompetitionEntries.Any(e => e.CompetitionId == league.Id && e.TeamId == t.Id))
+                .ToListAsync(ct);
+
+            ordered.Add((league, teams));
         }
 
-        SquadAftermath.Apply(
-            match.HomeTeam.Players.Concat(match.AwayTeam.Players),
-            result.Aftermath);
+        ordered = ordered
+            .OrderByDescending(x => x.Teams.Count == 0 ? 0 : x.Teams.Average(t => t.TeamOverall))
+            .ToList();
+
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            var (league, teams) = ordered[i];
+            var take = perLeague + (i < remainder ? 1 : 0);
+
+            var matches = await db.Matches
+                .AsNoTracking()
+                .Where(m => m.CompetitionId == league.Id)
+                .ToListAsync(ct);
+
+            var table = standingsCalculator.Calculate(teams, matches);
+            var topIds = table.Take(take).Select(r => r.TeamId).ToHashSet();
+
+            qualifiers.AddRange(teams.Where(t => topIds.Contains(t.Id)));
+        }
+
+        return qualifiers;
     }
 
-    private static CupTieDto BuildTie(Guid tieId, List<Match> legs, Guid? userTeamId)
+    private static IReadOnlyList<GroupDto> BuildGroups(
+        List<CompetitionEntry> entries,
+        List<Match> matches,
+        Dictionary<Guid, Team> teamById)
+    {
+        var groups = new List<GroupDto>();
+
+        foreach (var group in entries.Where(e => e.GroupName is not null).GroupBy(e => e.GroupName!).OrderBy(g => g.Key))
+        {
+            var groupTeams = group.Select(e => teamById[e.TeamId]).ToList();
+            var groupMatches = matches.Where(m => m.GroupName == group.Key).ToList();
+
+            var calculator = new StandingsCalculator();
+            var table = calculator.Calculate(groupTeams, groupMatches);
+
+            groups.Add(new GroupDto(group.Key, table.Select(r => new GroupRowDto(
+                r.Rank,
+                r.TeamId,
+                r.TeamName,
+                teamById.GetValueOrDefault(r.TeamId)?.LogoUrl,
+                r.Played,
+                r.Won,
+                r.Drawn,
+                r.Lost,
+                r.GoalsFor,
+                r.GoalsAgainst,
+                r.GoalDifference,
+                r.Points,
+                r.Rank <= CupRules.QualifiersPerGroup)).ToList()));
+        }
+
+        return groups;
+    }
+
+    private static CupTieDto BuildTie(
+        Guid tieId,
+        List<Match> legs,
+        Guid? userTeamId,
+        Dictionary<Guid, Team> teamById)
     {
         var firstLeg = legs.OrderBy(m => m.Leg ?? 1).First();
         var complete = legs.All(m => m.IsPlayed);
 
-        var homeAggregate = 0;
-        var awayAggregate = 0;
-
-        foreach (var leg in legs.Where(m => m.IsPlayed))
-        {
-            if (leg.HomeTeamId == firstLeg.HomeTeamId)
-            {
-                homeAggregate += leg.HomeGoals;
-                awayAggregate += leg.AwayGoals;
-            }
-            else
-            {
-                homeAggregate += leg.AwayGoals;
-                awayAggregate += leg.HomeGoals;
-            }
-        }
+        var (homeAggregate, awayAggregate) = Aggregate(legs.Where(m => m.IsPlayed).ToList(), firstLeg.HomeTeamId);
 
         Guid? winner = null;
         var onPenalties = false;
@@ -279,7 +451,7 @@ public class CupService(IAppDbContext db, IMatchEngine matchEngine) : ICupServic
             }
             catch (InvalidOperationException)
             {
-                // Level with no shoot-out recorded yet; the round has not been settled.
+                // Level with no shoot-out recorded yet; the round is not settled.
             }
         }
 
@@ -287,9 +459,11 @@ public class CupService(IAppDbContext db, IMatchEngine matchEngine) : ICupServic
             tieId,
             firstLeg.Round ?? CupRound.QuarterFinal,
             firstLeg.HomeTeamId,
-            firstLeg.HomeTeam?.Name ?? string.Empty,
+            teamById.GetValueOrDefault(firstLeg.HomeTeamId)?.Name ?? string.Empty,
+            teamById.GetValueOrDefault(firstLeg.HomeTeamId)?.LogoUrl,
             firstLeg.AwayTeamId,
-            firstLeg.AwayTeam?.Name ?? string.Empty,
+            teamById.GetValueOrDefault(firstLeg.AwayTeamId)?.Name ?? string.Empty,
+            teamById.GetValueOrDefault(firstLeg.AwayTeamId)?.LogoUrl,
             homeAggregate,
             awayAggregate,
             complete,
@@ -298,20 +472,63 @@ public class CupService(IAppDbContext db, IMatchEngine matchEngine) : ICupServic
             legs.OrderBy(m => m.Leg ?? 1).Select(m => m.ToDto(userTeamId)).ToList());
     }
 
+    private static (int Home, int Away) Aggregate(List<Match> legs, Guid homeTeamId)
+    {
+        var home = 0;
+        var away = 0;
+
+        foreach (var leg in legs)
+        {
+            if (leg.HomeTeamId == homeTeamId)
+            {
+                home += leg.HomeGoals;
+                away += leg.AwayGoals;
+            }
+            else
+            {
+                home += leg.AwayGoals;
+                away += leg.HomeGoals;
+            }
+        }
+
+        return (home, away);
+    }
+
     private static bool IsUserMatch(Match match, Guid? userTeamId) =>
         userTeamId is not null && (match.HomeTeamId == userTeamId || match.AwayTeamId == userTeamId);
 
-    private async Task<League> OwnedLeagueAsync(string userId, Guid leagueId, CancellationToken ct) =>
-        await db.Leagues
-            .Include(l => l.Matches)
-            .FirstOrDefaultAsync(l => l.Id == leagueId && l.UserId == userId, ct)
-        ?? throw new KeyNotFoundException($"League {leagueId} was not found.");
+    private Task<Season> OwnedSeasonAsync(string userId, Guid seasonId, CancellationToken ct) =>
+        OwnedSeasonAsync(userId, seasonId, tracked: false, ct);
 
-    private async Task<List<Match>> CupMatchesAsync(Guid leagueId, CancellationToken ct) =>
-        await db.Matches
+    private async Task<Season> OwnedSeasonAsync(string userId, Guid seasonId, bool tracked, CancellationToken ct)
+    {
+        var query = tracked ? db.Seasons : db.Seasons.AsNoTracking();
+
+        return await query
+            .Include(s => s.Competitions)
+            .FirstOrDefaultAsync(s => s.Id == seasonId && s.UserId == userId, ct)
+        ?? throw new KeyNotFoundException($"Season {seasonId} was not found.");
+    }
+
+    private Task<List<Match>> CupMatchesAsync(Guid competitionId, CancellationToken ct) =>
+        CupMatchesAsync(competitionId, tracked: false, ct);
+
+    private async Task<List<Match>> CupMatchesAsync(Guid competitionId, bool tracked, CancellationToken ct)
+    {
+        var query = tracked ? db.Matches : db.Matches.AsNoTracking();
+
+        return await query
+            .Include(m => m.Competition)
             .Include(m => m.HomeTeam).ThenInclude(t => t.Players)
             .Include(m => m.AwayTeam).ThenInclude(t => t.Players)
             .Include(m => m.Events)
-            .Where(m => m.LeagueId == leagueId && m.Competition == CompetitionType.Cup)
+            .Where(m => m.CompetitionId == competitionId)
+            .ToListAsync(ct);
+    }
+
+    private async Task<List<Team>> EntrantTeamsAsync(Guid competitionId, CancellationToken ct) =>
+        await db.Teams
+            .AsNoTracking()
+            .Where(t => db.CompetitionEntries.Any(e => e.CompetitionId == competitionId && e.TeamId == t.Id))
             .ToListAsync(ct);
 }

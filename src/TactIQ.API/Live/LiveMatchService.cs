@@ -30,13 +30,13 @@ public class LiveMatchService(
         var db = scope.ServiceProvider.GetRequiredService<IAppDbContext>();
 
         var match = await LoadMatchAsync(db, matchId, ct);
-        var league = await db.Leagues.FirstOrDefaultAsync(l => l.Id == match.LeagueId, ct)
-                     ?? throw new KeyNotFoundException($"League {match.LeagueId} was not found.");
+        var season = await db.Seasons.FirstOrDefaultAsync(s => s.Id == match.Competition.SeasonId, ct)
+                     ?? throw new KeyNotFoundException($"Season {match.Competition.SeasonId} was not found.");
 
-        if (league.UserId != userId)
+        if (season.UserId != userId)
             throw new KeyNotFoundException($"Match {matchId} was not found.");
 
-        if (league.UserTeamId is not { } userTeamId)
+        if (season.UserTeamId is not { } userTeamId)
             throw new InvalidOperationException("Live matches are only available in Manager Mode.");
 
         if (match.HomeTeamId != userTeamId && match.AwayTeamId != userTeamId)
@@ -215,20 +215,23 @@ public class LiveMatchService(
             Style = session.UserStyle
         });
 
-        var league = await db.Leagues.FirstAsync(l => l.Id == session.LeagueId, ct);
+        var competition = await db.Competitions.FirstAsync(c => c.Id == session.CompetitionId, ct);
 
-        // Only a league fixture moves the season on; cup ties run on their own track.
-        if (match.Competition == CompetitionType.League)
+        // A knockout round is advanced by the cup service once both legs are in,
+        // so only week-by-week competitions move their own clock here.
+        var runsByWeek = competition.Kind == CompetitionKind.League
+                         || competition.CurrentRound == CupRound.GroupStage;
+
+        if (runsByWeek)
         {
             var weekStillPending = await db.Matches
-                .AnyAsync(m => m.LeagueId == league.Id
-                            && m.Competition == CompetitionType.League
-                            && m.WeekNumber == league.CurrentWeek
+                .AnyAsync(m => m.CompetitionId == competition.Id
+                            && m.WeekNumber == competition.CurrentWeek
                             && !m.IsPlayed
                             && m.Id != match.Id, ct);
 
-            if (!weekStillPending && match.WeekNumber == league.CurrentWeek)
-                league.CurrentWeek++;
+            if (!weekStillPending && match.WeekNumber == competition.CurrentWeek)
+                competition.CurrentWeek++;
         }
 
         await db.SaveChangesAsync(ct);
@@ -236,6 +239,7 @@ public class LiveMatchService(
 
     private static async Task<Match> LoadMatchAsync(IAppDbContext db, Guid matchId, CancellationToken ct) =>
         await db.Matches
+            .Include(m => m.Competition)
             .Include(m => m.HomeTeam).ThenInclude(t => t.Players)
             .Include(m => m.AwayTeam).ThenInclude(t => t.Players)
             .Include(m => m.Events)

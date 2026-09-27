@@ -7,23 +7,23 @@ namespace TactIQ.API.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/leagues/{leagueId:guid}/cup")]
+[Route("api/seasons/{seasonId:guid}/champions-league")]
 public class CupController(ICupService cup) : ControllerBase
 {
     private string UserId => User.FindFirstValue(ClaimTypes.NameIdentifier)
                              ?? throw new InvalidOperationException("Authenticated user has no id claim.");
 
-    /// <summary>Draws the quarter-finals. Only available once the league is over.</summary>
+    /// <summary>Draws the group stage. Only available once every league has finished.</summary>
     [HttpPost("start")]
-    public async Task<ActionResult<CupBracketDto>> Start(Guid leagueId, CancellationToken ct) =>
-        Ok(await cup.StartAsync(UserId, leagueId, ct));
+    public async Task<ActionResult<CupBracketDto>> Start(Guid seasonId, CancellationToken ct) =>
+        Ok(await cup.StartAsync(UserId, seasonId, ct));
 
     [HttpGet]
-    public async Task<ActionResult<CupBracketDto>> Bracket(Guid leagueId, CancellationToken ct) =>
-        Ok(await cup.GetBracketAsync(UserId, leagueId, ct));
+    public async Task<ActionResult<CupBracketDto>> Bracket(Guid seasonId, CancellationToken ct) =>
+        Ok(await cup.GetBracketAsync(UserId, seasonId, ct));
 
     /// <summary>Plays the current round, leaving your own tie to be played live.</summary>
     [HttpPost("play-round")]
-    public async Task<ActionResult<CupRoundResult>> PlayRound(Guid leagueId, CancellationToken ct) =>
-        Ok(await cup.PlayRoundAsync(UserId, leagueId, ct));
+    public async Task<ActionResult<CupRoundResult>> PlayRound(Guid seasonId, CancellationToken ct) =>
+        Ok(await cup.PlayRoundAsync(UserId, seasonId, ct));
 }

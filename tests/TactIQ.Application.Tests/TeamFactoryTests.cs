@@ -95,7 +95,7 @@ public class TeamFactoryTests
         var benchOnly = new Team
         {
             Id = team.Id,
-            LeagueId = team.LeagueId,
+            SeasonId = team.SeasonId,
             Name = team.Name,
             Players = team.Players.Where(p => p.IsStarter).ToList()
         };
@@ -106,14 +106,14 @@ public class TeamFactoryTests
     }
 
     [Fact]
-    public void AllPlayersBelongToTheirOwnTeamAndLeague()
+    public void AllPlayersBelongToTheirOwnTeamAndSeason()
     {
-        var leagueId = Guid.NewGuid();
-        var teams = _factory.CreateTeams(leagueId, 8);
+        var seasonId = Guid.NewGuid();
+        var teams = _factory.CreateTeams(seasonId, 8);
 
         Assert.All(teams, team =>
         {
-            Assert.Equal(leagueId, team.LeagueId);
+            Assert.Equal(seasonId, team.SeasonId);
             Assert.All(team.Players, p => Assert.Equal(team.Id, p.TeamId));
         });
     }

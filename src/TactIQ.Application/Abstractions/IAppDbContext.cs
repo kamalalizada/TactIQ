@@ -5,7 +5,9 @@ namespace TactIQ.Application.Abstractions;
 
 public interface IAppDbContext
 {
-    DbSet<League> Leagues { get; }
+    DbSet<Season> Seasons { get; }
+    DbSet<Competition> Competitions { get; }
+    DbSet<CompetitionEntry> CompetitionEntries { get; }
     DbSet<Team> Teams { get; }
     DbSet<Player> Players { get; }
     DbSet<Match> Matches { get; }

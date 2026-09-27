@@ -26,7 +26,8 @@ public class LiveMatchSession
         IMatchEngine engine)
     {
         MatchId = match.Id;
-        LeagueId = match.LeagueId;
+        CompetitionId = match.CompetitionId;
+        SeasonId = match.Competition.SeasonId;
         UserTeamId = userTeamId;
         HomeTeam = match.HomeTeam;
         AwayTeam = match.AwayTeam;
@@ -42,7 +43,10 @@ public class LiveMatchSession
     }
 
     public Guid MatchId { get; }
-    public Guid LeagueId { get; }
+    public Guid CompetitionId { get; }
+
+    /// <summary>The save file this match belongs to; the squad lives here.</summary>
+    public Guid SeasonId { get; }
     public Guid UserTeamId { get; }
 
     public Team HomeTeam { get; }
@@ -222,7 +226,8 @@ public class LiveMatchSession
         {
             return new LiveStateDto(
                 MatchId,
-                LeagueId,
+                SeasonId,
+                CompetitionId,
                 Minute,
                 Status,
                 HomeTeam.Id,

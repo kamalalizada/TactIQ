@@ -5,11 +5,16 @@ namespace TactIQ.Domain.Entities;
 public class Team
 {
     public Guid Id { get; set; }
-    public Guid LeagueId { get; set; }
-    public League League { get; set; } = null!;
+
+    public Guid SeasonId { get; set; }
+    public Season Season { get; set; } = null!;
 
     public string Name { get; set; } = string.Empty;
     public string? LogoUrl { get; set; }
+
+    /// <summary>The league this club belongs to, which also decides who it can
+    /// meet domestically.</summary>
+    public string Country { get; set; } = string.Empty;
 
     public List<Player> Players { get; set; } = [];
 

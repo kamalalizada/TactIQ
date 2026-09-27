@@ -4,7 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using TactIQ.Application.Abstractions;
 using TactIQ.Application.Cup;
-using TactIQ.Application.Leagues;
+using TactIQ.Application.Seasons;
 using TactIQ.Application.Scheduling;
 using TactIQ.Application.Seeding;
 using TactIQ.Application.Simulation;
@@ -43,7 +43,7 @@ public static class DependencyInjection
         services.AddSingleton<IStatisticsCalculator, StatisticsCalculator>();
         services.AddSingleton<IMatchEngine>(_ => new MatchEngine());
         services.AddSingleton<ITeamFactory>(_ => new TeamFactory());
-        services.AddScoped<ILeagueService, LeagueService>();
+        services.AddScoped<ISeasonService, SeasonService>();
         services.AddScoped<ICupService, CupService>();
 
         return services;

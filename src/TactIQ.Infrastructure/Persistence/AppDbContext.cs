@@ -9,7 +9,9 @@ namespace TactIQ.Infrastructure.Persistence;
 public class AppDbContext(DbContextOptions<AppDbContext> options)
     : IdentityDbContext<ApplicationUser>(options), IAppDbContext
 {
-    public DbSet<League> Leagues => Set<League>();
+    public DbSet<Season> Seasons => Set<Season>();
+    public DbSet<Competition> Competitions => Set<Competition>();
+    public DbSet<CompetitionEntry> CompetitionEntries => Set<CompetitionEntry>();
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<Player> Players => Set<Player>();
     public DbSet<Match> Matches => Set<Match>();
@@ -20,32 +22,64 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
     {
         base.OnModelCreating(builder);
 
-        builder.Entity<League>(e =>
+        builder.Entity<Season>(e =>
         {
-            e.Property(l => l.UserId).IsRequired().HasMaxLength(450);
-            e.Property(l => l.SeasonName).IsRequired().HasMaxLength(120);
-            e.HasIndex(l => l.UserId);
+            e.Property(s => s.UserId).IsRequired().HasMaxLength(450);
+            e.Property(s => s.Name).IsRequired().HasMaxLength(120);
+            e.HasIndex(s => s.UserId);
+            e.Ignore(s => s.IsFinished);
 
-            e.HasMany(l => l.Teams)
-                .WithOne(t => t.League)
-                .HasForeignKey(t => t.LeagueId)
+            e.HasMany(s => s.Teams)
+                .WithOne(t => t.Season)
+                .HasForeignKey(t => t.SeasonId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            e.HasMany(l => l.Matches)
-                .WithOne(m => m.League)
-                .HasForeignKey(m => m.LeagueId)
+            e.HasMany(s => s.Competitions)
+                .WithOne(c => c.Season)
+                .HasForeignKey(c => c.SeasonId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<Competition>(e =>
+        {
+            e.Property(c => c.Name).IsRequired().HasMaxLength(120);
+            e.Property(c => c.Country).HasMaxLength(60);
+            e.HasIndex(c => new { c.SeasonId, c.Kind });
+
+            // Computed from the fixtures; never persisted.
+            e.Ignore(c => c.TotalWeeks);
+            e.Ignore(c => c.IsFinished);
+
+            e.HasMany(c => c.Matches)
+                .WithOne(m => m.Competition)
+                .HasForeignKey(m => m.CompetitionId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Computed from TeamCount; never persisted.
-            e.Ignore(l => l.TotalWeeks);
-            e.Ignore(l => l.IsFinished);
+            e.HasMany(c => c.Entries)
+                .WithOne(x => x.Competition)
+                .HasForeignKey(x => x.CompetitionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<CompetitionEntry>(e =>
+        {
+            e.Property(x => x.GroupName).HasMaxLength(4);
+            e.HasIndex(x => new { x.CompetitionId, x.TeamId }).IsUnique();
+
+            // Deleting a season already removes its teams; a second cascade path
+            // through the entry table is what PostgreSQL refuses.
+            e.HasOne(x => x.Team)
+                .WithMany()
+                .HasForeignKey(x => x.TeamId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<Team>(e =>
         {
             e.Property(t => t.Name).IsRequired().HasMaxLength(120);
+            e.Property(t => t.Country).IsRequired().HasMaxLength(60);
             e.Property(t => t.LogoUrl).HasMaxLength(500);
-            e.HasIndex(t => t.LeagueId);
+            e.HasIndex(t => new { t.SeasonId, t.Country });
 
             e.HasMany(t => t.Players)
                 .WithOne(p => p.Team)
@@ -61,17 +95,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
         builder.Entity<Player>(e =>
         {
             e.Property(p => p.Name).IsRequired().HasMaxLength(120);
+            e.Property(p => p.Nationality).HasMaxLength(60);
             e.HasIndex(p => p.TeamId);
+            e.Ignore(p => p.IsAvailable);
         });
 
         builder.Entity<Match>(e =>
         {
-            e.HasIndex(m => new { m.LeagueId, m.WeekNumber });
-            e.HasIndex(m => new { m.LeagueId, m.Competition });
+            e.HasIndex(m => new { m.CompetitionId, m.WeekNumber });
             e.HasIndex(m => m.TieId);
+            e.Property(m => m.GroupName).HasMaxLength(4);
             e.Ignore(m => m.WentToPenalties);
 
-            // Both FKs point at Team; restrict so deleting a league cascades only once.
+            // Both FKs point at Team, so neither may cascade.
             e.HasOne(m => m.HomeTeam)
                 .WithMany()
                 .HasForeignKey(m => m.HomeTeamId)

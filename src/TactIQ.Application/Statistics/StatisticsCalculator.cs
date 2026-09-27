@@ -80,10 +80,16 @@ public class StatisticsCalculator : IStatisticsCalculator
 
         foreach (var match in played)
         {
+            // The engine records events, not line-ups, so a player counts as having
+            // appeared in a match only once he does something in it.
+            var appeared = new HashSet<Guid>();
+
             foreach (var e in match.Events)
             {
                 if (e.PlayerId is { } playerId && byPlayer.TryGetValue(playerId, out var tally))
                 {
+                    appeared.Add(playerId);
+
                     switch (e.EventType)
                     {
                         case MatchEventType.Goal: tally.Goals++; break;
@@ -93,16 +99,14 @@ public class StatisticsCalculator : IStatisticsCalculator
                 }
 
                 if (e.AssistPlayerId is { } assistId && byPlayer.TryGetValue(assistId, out var assister))
+                {
+                    appeared.Add(assistId);
                     assister.Assists++;
+                }
             }
 
-            // Anyone in the squad of a team that played is counted as available for
-            // that match; the engine does not record who was actually on the pitch.
-            foreach (var teamId in new[] { match.HomeTeamId, match.AwayTeamId })
-            {
-                foreach (var tally in byPlayer.Values.Where(t => t.Team.Id == teamId))
-                    tally.MatchesPlayed++;
-            }
+            foreach (var playerId in appeared)
+                byPlayer[playerId].MatchesPlayed++;
         }
 
         return byPlayer.Values.ToList();

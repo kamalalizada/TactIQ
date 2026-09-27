@@ -12,7 +12,6 @@ public class CupRulesTests
         TieId = tieId,
         Leg = leg,
         Round = CupRound.QuarterFinal,
-        Competition = CompetitionType.Cup,
         HomeTeamId = homeId,
         AwayTeamId = awayId,
         HomeGoals = homeGoals,
