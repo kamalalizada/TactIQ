@@ -59,9 +59,32 @@ public class TransferService(IAppDbContext db) : ITransferService
         // first and only then priced and filtered on what it costs.
         var take = Math.Clamp(query.Take, 1, 200);
 
+        // Price is worked out from rating and age, so it cannot be filtered in
+        // the database. Where a ceiling is set, the rating that ceiling can
+        // afford is worked out first and the query capped there — otherwise the
+        // best players in the game fill the page and every one of them is then
+        // thrown away for being too dear, leaving a manager on a budget with an
+        // empty market.
+        // Price is worked out from rating and age, so it cannot be filtered in
+        // the database. Where a ceiling is set, the best rating that ceiling
+        // could possibly afford is worked out first and the query capped there.
+        // Without it the page fills with the finest players in the game, every
+        // one of them is then thrown away for being too dear, and a manager on
+        // a budget is told the market is empty.
+        //
+        // Even capped, the search has to look at more than it returns: an older
+        // player of a given rating is affordable where a younger one of the
+        // same rating is not, and only the pricing knows which.
+        var reach = query.MaxPrice is { } ceiling
+            ? PlayerValuation.HighestRatingUnder(ceiling)
+            : int.MaxValue;
+
+        var scanned = query.MaxPrice is null ? take * 3 : Math.Max(take * 10, 400);
+
         var found = await players
+            .Where(p => p.Overall <= reach)
             .OrderByDescending(p => p.Overall)
-            .Take(take * 3)
+            .Take(scanned)
             .ToListAsync(ct);
 
         var bidOn = await PendingOfferPlayerIdsAsync(seasonId, club.Id, ct);
@@ -70,6 +93,7 @@ public class TransferService(IAppDbContext db) : ITransferService
         return found
             .Select(p => ToMarketDto(p, club, bidOn.Contains(p.Id), squads))
             .Where(dto => query.MaxPrice is not { } maxPrice || dto.Value <= maxPrice)
+            .OrderByDescending(dto => dto.Overall)
             .Take(take)
             .ToList();
     }

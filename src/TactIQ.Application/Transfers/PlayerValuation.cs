@@ -50,6 +50,48 @@ public static class PlayerValuation
     }
 
     /// <summary>
+    /// The highest rating anyone could be and still cost no more than this.
+    ///
+    /// Price rises with rating whatever the age or position, so a ceiling on
+    /// the fee is also a ceiling on the ability — which is what lets a search
+    /// narrow by price in the database, where the price itself cannot be
+    /// worked out. It is deliberately generous: the youngest, dearest player
+    /// at that rating is the one it allows for, and anyone priced over the
+    /// ceiling is dropped afterwards.
+    /// </summary>
+    public static int HighestRatingUnder(decimal ceiling)
+    {
+        if (ceiling <= Base)
+            return Floor;
+
+        // The cheapest a player of a given rating can be is one at the very end
+        // of his career, in goal. Searching from the top down for the first
+        // rating whose cheapest example fits keeps everyone affordable.
+        for (var overall = 99; overall > Floor; overall--)
+        {
+            if (Cheapest(overall) <= ceiling)
+                return overall;
+        }
+
+        return Floor;
+    }
+
+    /// <summary>
+    /// The least anybody of this rating could cost, whatever his age and
+    /// whatever he plays.
+    /// </summary>
+    private static decimal Cheapest(int overall)
+    {
+        var lowest = decimal.MaxValue;
+
+        foreach (var age in new[] { 18, 24, 30, 34, 40 })
+        foreach (var position in Enum.GetValues<Position>())
+            lowest = Math.Min(lowest, Of(overall, age, position));
+
+        return lowest;
+    }
+
+    /// <summary>
     /// What age does to a price. A player comes into their worth in their
     /// early twenties, holds it to about twenty-seven, and then loses it — at
     /// first slowly, and after thirty quickly, because a buying club is paying

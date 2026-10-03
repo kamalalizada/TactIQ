@@ -109,4 +109,41 @@ public class PlayerValuationTests
             .Players
             .Sum(p => PlayerValuation.Of(p.Overall, p.Age, Enum.Parse<Position>(p.Position)));
     }
+
+    [Fact]
+    public void APriceCeilingAllowsThroughEveryoneWhoFitsUnderIt()
+    {
+        // A search by price narrows on rating first, so the ceiling it works
+        // out must not exclude anybody who is actually affordable — a budget
+        // of five million has to find the players who cost five million.
+        foreach (var ceiling in new[] { 1_000_000m, 5_000_000m, 25_000_000m, 90_000_000m })
+        {
+            var highest = PlayerValuation.HighestRatingUnder(ceiling);
+
+            // Ratings run to 99, so a ceiling that affords the very best has
+            // nobody above it to cut out.
+            if (highest >= 99)
+                continue;
+
+            foreach (var age in new[] { 19, 25, 31, 37 })
+            foreach (var position in Enum.GetValues<Position>())
+            {
+                var affordable = PlayerValuation.Of(highest + 1, age, position) <= ceiling;
+
+                Assert.False(
+                    affordable,
+                    $"A {highest + 1} at {age} ({position}) costs under {ceiling} but was cut out.");
+            }
+        }
+    }
+
+    [Fact]
+    public void ASmallBudgetStillFindsAMarket()
+    {
+        // The cheapest players in the game must come back for a club with
+        // little to spend, or its market reads as empty.
+        var ceiling = PlayerValuation.HighestRatingUnder(2_000_000m);
+
+        Assert.True(ceiling > 55, "A two-million budget could not afford anybody.");
+    }
 }
