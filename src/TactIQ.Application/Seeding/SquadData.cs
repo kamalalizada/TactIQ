@@ -6,8 +6,11 @@ namespace TactIQ.Application.Seeding;
 public record SquadPlayer(
     string Name,
     string Position,
+    string Role,
     int ShirtNumber,
     bool IsStarter,
+    /// <summary>Where a starter stands in the club's shape; zero off the pitch.</summary>
+    int LineupSlot,
     int Overall,
     int Age,
     string Nationality,
@@ -24,6 +27,8 @@ public record Squad(
     string League,
     string? LogoUrl,
     int Strength,
+    /// <summary>The shape this club lines up in, which its squad is built for.</summary>
+    string Formation,
     IReadOnlyList<SquadPlayer> Players);
 
 /// <summary>Real club squads, embedded so seeding needs no external files at runtime.</summary>

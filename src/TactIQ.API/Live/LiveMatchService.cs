@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using TactIQ.Application.Abstractions;
 using TactIQ.Application.Live;
+using TactIQ.Application.Seasons;
 using TactIQ.Application.Simulation;
 using TactIQ.Domain.Entities;
 using TactIQ.Domain.Enums;
@@ -206,6 +207,9 @@ public class LiveMatchService(
         SquadAftermath.Apply(
             match.HomeTeam.Players.Concat(match.AwayTeam.Players),
             session.Aftermath);
+
+        // A match the manager played out himself earns what any other does.
+        SeasonService.PayResult(match);
 
         match.Tactics.Add(new TeamTactics
         {

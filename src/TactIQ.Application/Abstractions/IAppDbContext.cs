@@ -13,6 +13,8 @@ public interface IAppDbContext
     DbSet<Match> Matches { get; }
     DbSet<MatchEvent> MatchEvents { get; }
     DbSet<TeamTactics> TeamTactics { get; }
+    DbSet<TransferOffer> TransferOffers { get; }
+    DbSet<Transfer> Transfers { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

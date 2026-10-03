@@ -32,6 +32,25 @@ public record LiveEventDto(
     Guid? AssistPlayerId = null);
 
 /// <summary>A single broadcast frame: where the match stands right now.</summary>
+/// <summary>A player as they stand in this match, not as the squad stores them.</summary>
+public record LivePlayerDto(
+    Guid Id,
+    string Name,
+    Position Position,
+    /// <summary>The role the player belongs in.</summary>
+    PlayerRole Role,
+    /// <summary>The role being filled tonight, which may not be their own.</summary>
+    PlayerRole PlayedRole,
+    int ShirtNumber,
+    /// <summary>Tonight's rating, already reduced if the role is not theirs.</summary>
+    int Overall,
+    /// <summary>Remaining stamina, 0-100, which falls as the match runs.</summary>
+    int Stamina,
+    bool OnPitch,
+    bool SentOff,
+    bool Injured,
+    int YellowCards);
+
 public record LiveStateDto(
     Guid MatchId,
     Guid SeasonId,
@@ -49,4 +68,6 @@ public record LiveStateDto(
     int SubstitutionsUsed,
     int SubstitutionsRemaining,
     int SpeedMultiplier,
+    /// <summary>The managed side as it stands right now, for the bench sheet.</summary>
+    IReadOnlyList<LivePlayerDto> Squad,
     IReadOnlyList<LiveEventDto> Events);

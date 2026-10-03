@@ -20,6 +20,14 @@ public class Season
 
     public DateTime CreatedAt { get; set; }
 
+    /// <summary>
+    /// How far the save has got, counted in league weeks. Each competition
+    /// keeps its own week, but the transfer window is one thing for the whole
+    /// save, so it is read from here rather than from whichever competition
+    /// happens to be furthest along.
+    /// </summary>
+    public int CurrentWeek { get; set; }
+
     public List<Team> Teams { get; set; } = [];
     public List<Competition> Competitions { get; set; } = [];
 

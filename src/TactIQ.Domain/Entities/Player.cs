@@ -9,7 +9,14 @@ public class Player
     public Team Team { get; set; } = null!;
 
     public string Name { get; set; } = string.Empty;
+    /// <summary>The line of the pitch this player fills in a formation.</summary>
     public Position Position { get; set; }
+
+    /// <summary>
+    /// Where they actually play within that line. Playing away from it costs
+    /// them a share of their ability; see <c>RoleFitness</c>.
+    /// </summary>
+    public PlayerRole Role { get; set; }
     public int ShirtNumber { get; set; }
 
     public int Age { get; set; }
@@ -23,6 +30,13 @@ public class Player
     public int Physical { get; set; }
 
     public bool IsStarter { get; set; }
+
+    /// <summary>
+    /// Where a starter stands in the shape, counted across each line from the
+    /// left: 0 is the keeper, then the defenders, midfielders and forwards in
+    /// turn. Left at 0 for anyone on the bench.
+    /// </summary>
+    public int LineupSlot { get; set; }
 
     /// <summary>The player's headline rating, kept as given rather than averaged
     /// from the six attributes — a striker's low defending must not drag it down.</summary>

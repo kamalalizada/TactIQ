@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using TactIQ.Application.Abstractions;
 using TactIQ.Application.Cup;
 using TactIQ.Application.Seasons;
+using TactIQ.Application.Transfers;
 using TactIQ.Application.Scheduling;
 using TactIQ.Application.Seeding;
 using TactIQ.Application.Simulation;
@@ -45,6 +46,7 @@ public static class DependencyInjection
         services.AddSingleton<ITeamFactory>(_ => new TeamFactory());
         services.AddScoped<ISeasonService, SeasonService>();
         services.AddScoped<ICupService, CupService>();
+        services.AddScoped<ITransferService, TransferService>();
 
         return services;
     }

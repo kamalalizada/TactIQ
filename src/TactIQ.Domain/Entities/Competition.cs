@@ -25,6 +25,13 @@ public class Competition
 
     public Guid? WinnerTeamId { get; set; }
 
+    /// <summary>
+    /// Whether the end-of-season money has gone out. A finished league is
+    /// looked at again every time a week is simulated, so without this the
+    /// same prize would be paid over and over.
+    /// </summary>
+    public bool PrizesPaid { get; set; }
+
     /// <summary>Which clubs take part. The Champions League draws from every league.</summary>
     public List<CompetitionEntry> Entries { get; set; } = [];
     public List<Match> Matches { get; set; } = [];

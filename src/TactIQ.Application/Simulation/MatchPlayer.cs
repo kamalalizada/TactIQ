@@ -10,6 +10,22 @@ public class MatchPlayer(Player player)
     public Guid Id { get; } = player.Id;
     public string Name { get; } = player.Name;
     public Position Position { get; } = player.Position;
+    public int ShirtNumber { get; } = player.ShirtNumber;
+
+    /// <summary>Where the manager placed them, which decides the job they fill.</summary>
+    public int LineupSlot { get; } = player.LineupSlot;
+
+    /// <summary>The role this player is best at.</summary>
+    public PlayerRole NaturalRole { get; } = player.Role;
+
+    /// <summary>
+    /// The role they have been asked to fill today. It starts as their own and
+    /// changes only when a manager fields them somewhere else.
+    /// </summary>
+    public PlayerRole PlayedRole { get; set; } = player.Role;
+
+    /// <summary>What survives of their ability in the role they are playing.</summary>
+    public double RoleFit => RoleFitness.For(NaturalRole, PlayedRole);
 
     public bool OnPitch { get; set; } = player.IsStarter;
     public bool SentOff { get; private set; }
@@ -28,16 +44,23 @@ public class MatchPlayer(Player player)
     public int Dribbling => Degraded(_source.Dribbling);
     public int Defending => Degraded(_source.Defending);
     public int Physical => Degraded(_source.Physical);
-    public int Overall => _source.Overall;
+    /// <summary>Their rating in the role they are playing, not in the abstract.</summary>
+    public int Overall => Math.Max(1, (int)Math.Round(_source.Overall * RoleFit));
+
+    /// <summary>Their rating at their best, regardless of where they are playing.</summary>
+    public int NaturalOverall => _source.Overall;
 
     public Player Source => _source;
 
-    /// <summary>Tiredness costs at most 25% of an attribute, and a strong player
-    /// burns through it more slowly.</summary>
+    /// <summary>
+    /// Tiredness costs at most 25% of an attribute, and a strong player burns
+    /// through it more slowly. Playing out of position costs a further share,
+    /// so a full-back asked to play up front is weaker in every department.
+    /// </summary>
     private int Degraded(int attribute)
     {
         var freshness = 0.75 + 0.25 * (Stamina / 100.0);
-        return Math.Max(1, (int)Math.Round(attribute * freshness));
+        return Math.Max(1, (int)Math.Round(attribute * freshness * RoleFit));
     }
 
     public void Drain(double baseCost)

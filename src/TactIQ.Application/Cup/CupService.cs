@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TactIQ.Application.Abstractions;
+using TactIQ.Application.Finances;
 using TactIQ.Application.Scheduling;
 using TactIQ.Application.Seasons;
 using TactIQ.Application.Simulation;
@@ -21,7 +22,9 @@ public class CupService(
 
     public async Task<CupBracketDto> StartAsync(string userId, Guid seasonId, CancellationToken ct = default)
     {
-        var season = await OwnedSeasonAsync(userId, seasonId, ct);
+        // Tracked: the new competition is attached to this instance, so EF has
+        // to be watching it for SaveChanges to write anything.
+        var season = await OwnedSeasonAsync(userId, seasonId, tracked: true, ct);
 
         var existing = season.Competitions.FirstOrDefault(c => c.Kind == CompetitionKind.ChampionsLeague);
         if (existing is not null)
@@ -44,11 +47,18 @@ public class CupService(
             CurrentWeek = 1
         };
 
+        // Added through the set, not the season's collection: the id is assigned
+        // up front, so EF would otherwise treat it as an existing row and issue
+        // an UPDATE that matches nothing. Saved first because the entries and
+        // matches below reference it by id alone.
+        db.Competitions.Add(competition);
+        await db.SaveChangesAsync(ct);
+
         var groups = CupRules.DrawGroups(qualifiers, _random);
 
         foreach (var (name, teamIds) in groups)
         {
-            competition.Entries.AddRange(teamIds.Select(id => new CompetitionEntry
+            db.CompetitionEntries.AddRange(teamIds.Select(id => new CompetitionEntry
             {
                 CompetitionId = competition.Id,
                 TeamId = id,
@@ -56,7 +66,7 @@ public class CupService(
             }));
 
             // Each group is its own small double round-robin.
-            competition.Matches.AddRange(scheduleGenerator
+            db.Matches.AddRange(scheduleGenerator
                 .Generate(teamIds)
                 .Select(f => new Match
                 {
@@ -69,7 +79,11 @@ public class CupService(
                 }));
         }
 
-        season.Competitions.Add(competition);
+        // Qualifying for the group stage is itself worth a season's league
+        // prize money, which is why clubs chase a European place all year.
+        await new SeasonPayout(db, standingsCalculator)
+            .PayCupRoundAsync(competition, CupRound.GroupStage, [.. qualifiers.Select(t => t.Id)], ct);
+
         await db.SaveChangesAsync(ct);
 
         return await GetBracketAsync(userId, seasonId, ct);
@@ -119,7 +133,11 @@ public class CupService(
             ties);
     }
 
-    public async Task<CupRoundResult> PlayRoundAsync(string userId, Guid seasonId, CancellationToken ct = default)
+    public async Task<CupRoundResult> PlayRoundAsync(
+        string userId,
+        Guid seasonId,
+        bool includeUserMatch = false,
+        CancellationToken ct = default)
     {
         var season = await OwnedSeasonAsync(userId, seasonId, tracked: true, ct);
 
@@ -132,8 +150,40 @@ public class CupService(
         var matches = await CupMatchesAsync(competition.Id, tracked: true, ct);
 
         return round == CupRound.GroupStage
-            ? await PlayGroupWeekAsync(season, competition, matches, ct)
-            : await PlayKnockoutRoundAsync(season, competition, matches, round, ct);
+            ? await PlayGroupWeekAsync(season, competition, matches, includeUserMatch, ct)
+            : await PlayKnockoutRoundAsync(season, competition, matches, round, includeUserMatch, ct);
+    }
+
+    public async Task<CupRoundResult> PlayAllAsync(
+        string userId,
+        Guid seasonId,
+        bool includeUserMatch = false,
+        CancellationToken ct = default)
+    {
+        CupRoundResult lastResult = null;
+        
+        while (true)
+        {
+            var season = await OwnedSeasonAsync(userId, seasonId, tracked: true, ct);
+            var competition = season.Competitions.FirstOrDefault(c => c.Kind == CompetitionKind.ChampionsLeague);
+            
+            if (competition == null || competition.CurrentRound == null)
+                break; // Tournament finished or not drawn
+
+            var matches = await CupMatchesAsync(competition.Id, tracked: true, ct);
+            
+            var round = competition.CurrentRound.Value;
+            var result = round == CupRound.GroupStage
+                ? await PlayGroupWeekAsync(season, competition, matches, includeUserMatch, ct)
+                : await PlayKnockoutRoundAsync(season, competition, matches, round, includeUserMatch, ct);
+
+            lastResult = result;
+
+            if (result.CupFinished || result.PendingUserMatch != null)
+                break;
+        }
+
+        return lastResult ?? throw new InvalidOperationException("Cannot simulate all: tournament already finished.");
     }
 
     /// <summary>Group games run a week at a time so the manager can play their own.</summary>
@@ -141,6 +191,7 @@ public class CupService(
         Season season,
         Competition competition,
         List<Match> matches,
+        bool includeUserMatch,
         CancellationToken ct)
     {
         var week = competition.CurrentWeek;
@@ -151,7 +202,9 @@ public class CupService(
 
         foreach (var match in thisWeek)
         {
-            if (IsUserMatch(match, season.UserTeamId))
+            // The manager's own match is normally left for them to play out live;
+            // when they ask for it to be settled, it is simulated like any other.
+            if (!includeUserMatch && IsUserMatch(match, season.UserTeamId))
             {
                 pending = match;
                 continue;
@@ -195,6 +248,7 @@ public class CupService(
         Competition competition,
         List<Match> matches,
         CupRound round,
+        bool includeUserMatch,
         CancellationToken ct)
     {
         var roundMatches = matches.Where(m => m.Round == round).ToList();
@@ -210,7 +264,7 @@ public class CupService(
                 continue;
             }
 
-            if (IsUserMatch(match, season.UserTeamId))
+            if (!includeUserMatch && IsUserMatch(match, season.UserTeamId))
             {
                 pending ??= match;
                 continue;
@@ -226,6 +280,8 @@ public class CupService(
         {
             SettleLevelTies(roundMatches);
             nextRound = AdvanceWinners(competition, round, roundMatches);
+
+            await PayRoundAsync(competition, round, roundMatches, ct);
         }
 
         await db.SaveChangesAsync(ct);
@@ -243,6 +299,27 @@ public class CupService(
             competition.IsFinished,
             competition.WinnerTeamId,
             winnerName);
+    }
+
+    /// <summary>
+    /// Pays the clubs that came through a knockout round, and the two that
+    /// contested a final. European money is the reason a club wants this
+    /// competition, and it is paid as each round is survived rather than all at
+    /// the end — a side knocked out in the quarters keeps what it earned.
+    /// </summary>
+    private async Task PayRoundAsync(
+        Competition competition, CupRound round, List<Match> roundMatches, CancellationToken ct)
+    {
+        var survivors = round == CupRound.Final
+            // Both finalists are paid; only the winner gets the larger figure.
+            ? roundMatches.SelectMany(m => new[] { m.HomeTeamId, m.AwayTeamId }).Distinct().ToList()
+            : await db.CompetitionEntries
+                .Where(e => e.CompetitionId == competition.Id && !e.Eliminated)
+                .Select(e => e.TeamId)
+                .ToListAsync(ct);
+
+        await new SeasonPayout(db, standingsCalculator)
+            .PayCupRoundAsync(competition, round, survivors, ct);
     }
 
     /// <summary>Takes the top two of every group into the quarter-finals.</summary>

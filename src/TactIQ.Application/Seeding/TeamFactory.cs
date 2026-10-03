@@ -1,3 +1,4 @@
+using TactIQ.Application.Transfers;
 using TactIQ.Domain.Entities;
 using TactIQ.Domain.Enums;
 
@@ -40,7 +41,8 @@ public class TeamFactory(Random? random = null) : ITeamFactory
             SeasonId = seasonId,
             Name = squad.Name,
             Country = squad.Country,
-            LogoUrl = squad.LogoUrl
+            LogoUrl = squad.LogoUrl,
+            Formation = squad.Formation
         };
 
         team.Players = squad.Players
@@ -50,6 +52,8 @@ public class TeamFactory(Random? random = null) : ITeamFactory
                 TeamId = team.Id,
                 Name = p.Name,
                 Position = Enum.Parse<Position>(p.Position),
+                Role = Enum.Parse<PlayerRole>(p.Role),
+                LineupSlot = p.LineupSlot,
                 ShirtNumber = p.ShirtNumber,
                 IsStarter = p.IsStarter,
                 Overall = p.Overall,
@@ -63,6 +67,11 @@ public class TeamFactory(Random? random = null) : ITeamFactory
                 Physical = p.Physical
             })
             .ToList();
+
+        // A club's spending power follows the squad it already has, so the rich
+        // clubs of the strong leagues start the window able to buy and the rest
+        // have to sell before they do.
+        team.Budget = ClubFinances.StartingBudget(team.Players);
 
         return team;
     }

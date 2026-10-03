@@ -14,6 +14,21 @@ public class MatchSide
         Style = style;
         Form = form;
         Players = team.Players.Select(p => new MatchPlayer(p)).ToList();
+
+        ApplyFormation(team.Formation);
+    }
+
+    /// <summary>
+    /// Tells each starter which job they are filling tonight. A shirt in a slot
+    /// the shape means for somebody else plays below their rating, which is what
+    /// makes fielding a left-back on the right, or a winger up front, cost
+    /// something. Substitutes keep their own role until they come on.
+    /// </summary>
+    private void ApplyFormation(string formation)
+    {
+        foreach (var player in Players.Where(p => p.OnPitch))
+            player.PlayedRole =
+                FormationShape.RoleForSlot(formation, player.LineupSlot, player.NaturalRole);
     }
 
     public Team Team { get; }

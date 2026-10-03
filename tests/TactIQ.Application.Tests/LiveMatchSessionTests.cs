@@ -175,11 +175,17 @@ public class LiveMatchSessionTests
 
         Assert.True(session.TrySubstitute(outgoing.Id, incoming.Id, out var error), error);
 
-        Assert.False(outgoing.IsStarter);
-        Assert.True(incoming.IsStarter);
-        Assert.Equal(11, home.Players.Count(p => p.IsStarter));
-
         var state = session.Snapshot();
+
+        // The change belongs to this match only; the saved line-up is the
+        // manager's standing selection and must survive it untouched.
+        Assert.True(outgoing.IsStarter);
+        Assert.False(incoming.IsStarter);
+
+        Assert.False(state.Squad.Single(p => p.Id == outgoing.Id).OnPitch);
+        Assert.True(state.Squad.Single(p => p.Id == incoming.Id).OnPitch);
+        Assert.Equal(11, state.Squad.Count(p => p.OnPitch));
+
         Assert.Equal(1, state.SubstitutionsUsed);
         Assert.Contains(state.Events, e => e.EventType == MatchEventType.Substitution);
     }
@@ -233,15 +239,26 @@ public class LiveMatchSessionTests
             .OrderBy(p => p.Overall).First();
         var bench = home.Players.First(p => !p.IsStarter && p.Position == Position.FWD);
 
-        // Make the substitute clearly better so the rating has to move.
+        // Make the substitute clearly better so the rating has to move. Overall
+        // is stored rather than derived, so it is raised alongside the parts.
         bench.Shooting = 95;
         bench.Pace = 95;
         bench.Dribbling = 95;
+        bench.Overall = 95;
 
-        var before = home.AttackRating;
+        // The saved squad no longer changes, so the gain shows on the pitch:
+        // the stronger player is on, the weaker one off.
+        var before = session.Snapshot().Squad
+            .Where(p => p.OnPitch)
+            .Sum(p => p.Overall);
+
         Assert.True(session.TrySubstitute(weakest.Id, bench.Id, out _));
 
-        Assert.True(home.AttackRating > before);
+        var after = session.Snapshot().Squad
+            .Where(p => p.OnPitch)
+            .Sum(p => p.Overall);
+
+        Assert.True(after > before, $"before={before}, after={after}");
     }
 
     [Fact]

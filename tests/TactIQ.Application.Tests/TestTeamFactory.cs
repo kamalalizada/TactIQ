@@ -7,14 +7,25 @@ internal static class TestTeamFactory
 {
     public static Team Create(string name, int attributeLevel)
     {
-        var team = new Team { Id = Guid.NewGuid(), Name = name };
+        var team = new Team { Id = Guid.NewGuid(), Name = name, Formation = "4-4-2" };
 
+        // The eleven stand in the slots a 4-4-2 asks for, each in their own
+        // role, so nobody is quietly penalised for playing out of position.
         var layout = new[]
         {
-            (Position.GK, 1), (Position.DEF, 4), (Position.MID, 4), (Position.FWD, 2)
+            (Position.GK, PlayerRole.GK, 1),
+            (Position.DEF, PlayerRole.LB, 1),
+            (Position.DEF, PlayerRole.CB, 2),
+            (Position.DEF, PlayerRole.RB, 1),
+            (Position.MID, PlayerRole.LM, 1),
+            (Position.MID, PlayerRole.CM, 2),
+            (Position.MID, PlayerRole.RM, 1),
+            (Position.FWD, PlayerRole.ST, 2)
         };
 
-        foreach (var (position, count) in layout)
+        var slot = 1;
+
+        foreach (var (position, role, count) in layout)
         {
             for (var i = 0; i < count; i++)
             {
@@ -22,8 +33,10 @@ internal static class TestTeamFactory
                 {
                     Id = Guid.NewGuid(),
                     TeamId = team.Id,
-                    Name = $"{name} {position}{i}",
+                    Name = $"{name} {role}{i}",
                     Position = position,
+                    Role = role,
+                    LineupSlot = slot++,
                     IsStarter = true,
                     Overall = attributeLevel,
                     Pace = attributeLevel,
@@ -45,12 +58,19 @@ internal static class TestTeamFactory
         var team = Create(name, attributeLevel);
         var level = benchLevel == 0 ? attributeLevel - 5 : benchLevel;
 
+        // A bench that covers every job, so a substitution never forces
+        // somebody into a role they cannot play.
         var bench = new[]
         {
-            (Position.GK, 1), (Position.DEF, 2), (Position.MID, 3), (Position.FWD, 2)
+            (Position.GK, PlayerRole.GK, 1),
+            (Position.DEF, PlayerRole.CB, 1),
+            (Position.DEF, PlayerRole.RB, 1),
+            (Position.MID, PlayerRole.CM, 2),
+            (Position.MID, PlayerRole.LM, 1),
+            (Position.FWD, PlayerRole.ST, 2)
         };
 
-        foreach (var (position, count) in bench)
+        foreach (var (position, role, count) in bench)
         {
             for (var i = 0; i < count; i++)
             {
@@ -58,8 +78,9 @@ internal static class TestTeamFactory
                 {
                     Id = Guid.NewGuid(),
                     TeamId = team.Id,
-                    Name = $"{name} sub {position}{i}",
+                    Name = $"{name} sub {role}{i}",
                     Position = position,
+                    Role = role,
                     IsStarter = false,
                     Overall = level,
                     Pace = level,

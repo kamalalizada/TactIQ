@@ -6,6 +6,12 @@ public record CreateSeasonRequest(string Name, GameMode GameMode, Guid? UserTeam
 
 public record SetUserTeamRequest(Guid TeamId);
 
+/// <summary>
+/// The shape to play and the eleven who start in it, listed in pitch order:
+/// keeper first, then each line from left to right.
+/// </summary>
+public record SetLineupRequest(string Formation, IReadOnlyList<Guid> StarterIds);
+
 public record CompetitionSummaryDto(
     Guid Id,
     string Name,
@@ -33,6 +39,7 @@ public record PlayerDto(
     Guid Id,
     string Name,
     Position Position,
+    PlayerRole Role,
     int ShirtNumber,
     int Age,
     string Nationality,
@@ -44,6 +51,7 @@ public record PlayerDto(
     int Physical,
     int Overall,
     bool IsStarter,
+    int LineupSlot,
     int Condition,
     int MatchesInjured,
     int MatchesSuspended,
@@ -55,6 +63,7 @@ public record TeamDto(
     string Name,
     string Country,
     string? LogoUrl,
+    string Formation,
     double AttackRating,
     double DefenseRating,
     double TeamOverall,

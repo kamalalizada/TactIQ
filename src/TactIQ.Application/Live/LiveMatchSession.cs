@@ -158,12 +158,11 @@ public class LiveMatchSession
                 return false;
             }
 
+            // Only the live side changes: the saved line-up is the manager's
+            // standing selection and must survive a substitution made during a
+            // single match.
             outgoing.OnPitch = false;
             incoming.OnPitch = true;
-
-            // Keep the squad entity in step so the roster reflects who finished.
-            outgoing.Source.IsStarter = false;
-            incoming.Source.IsStarter = true;
 
             SubstitutionsUsed++;
 
@@ -241,6 +240,21 @@ public class LiveMatchSession
                 SubstitutionsUsed,
                 SquadRules.MaxSubstitutions - SubstitutionsUsed,
                 SpeedMultiplier,
+                UserSide.Players
+                    .Select(p => new LivePlayerDto(
+                        p.Id,
+                        p.Name,
+                        p.Position,
+                        p.NaturalRole,
+                        p.PlayedRole,
+                        p.ShirtNumber,
+                        p.Overall,
+                        (int)Math.Round(p.Stamina),
+                        p.OnPitch,
+                        p.SentOff,
+                        p.Injured,
+                        p.YellowCards))
+                    .ToList(),
                 _events.ToList());
         }
     }

@@ -20,7 +20,10 @@ public class AttackResolver(Random random)
             return outcomes;
 
         // Does the move survive the defence and become a shot?
-        var pressure = attacking.Attack / (attacking.Attack + defending.Defense);
+        var attWeight = Math.Pow(attacking.Attack, 2.5);
+        var defWeight = Math.Pow(defending.Defense, 2.5);
+        var pressure = attWeight / (attWeight + defWeight);
+        
         if (random.NextDouble() > pressure * EngineConstants.BaseChanceConversion * 2)
             return outcomes;
 
@@ -34,7 +37,9 @@ public class AttackResolver(Random random)
         // Shot quality against the keeper's ability to deal with it.
         var shotQuality = (shooter.Shooting * 0.7 + shooter.Dribbling * 0.3) / 100.0;
         var keeperQuality = keeper is null ? 0.35 : keeper.Defending / 100.0;
-        var scoreChance = shotQuality * 0.55 * (1 - keeperQuality * 0.55);
+        
+        // Increase the keeper's saving multiplier so high-rated keepers actually save most shots.
+        var scoreChance = shotQuality * 0.65 * (1 - keeperQuality * 0.75);
 
         var roll = random.NextDouble();
 

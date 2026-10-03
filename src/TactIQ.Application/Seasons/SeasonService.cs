@@ -4,7 +4,9 @@ using TactIQ.Application.Scheduling;
 using TactIQ.Application.Seeding;
 using TactIQ.Application.Simulation;
 using TactIQ.Application.Standings;
+using TactIQ.Application.Finances;
 using TactIQ.Application.Statistics;
+using TactIQ.Application.Transfers;
 using TactIQ.Domain.Entities;
 using TactIQ.Domain.Enums;
 
@@ -139,6 +141,72 @@ public class SeasonService(
         return await BuildSummaryAsync(season, ct);
     }
 
+    public async Task<TeamDto> SetLineupAsync(
+        string userId,
+        Guid seasonId,
+        string formation,
+        IReadOnlyList<Guid> starterIds,
+        CancellationToken ct = default)
+    {
+        var season = await EnsureSeasonAsync(userId, seasonId, tracked: true, ct);
+
+        if (season.UserTeamId is not { } teamId)
+            throw new InvalidOperationException("Only a managed club has a line-up to set.");
+
+        if (!FormationRules.IsKnown(formation))
+            throw new ArgumentException($"Unknown formation '{formation}'.", nameof(formation));
+
+        if (starterIds.Distinct().Count() != FormationRules.StarterCount)
+            throw new InvalidOperationException(
+                $"A line-up needs exactly {FormationRules.StarterCount} different players.");
+
+        var team = await db.Teams
+            .Include(t => t.Players)
+            .FirstOrDefaultAsync(t => t.Id == teamId && t.SeasonId == seasonId, ct)
+            ?? throw new KeyNotFoundException("The managed club was not found in this season.");
+
+        var chosen = team.Players.Where(p => starterIds.Contains(p.Id)).ToList();
+
+        if (chosen.Count != FormationRules.StarterCount)
+            throw new InvalidOperationException("Every starter must belong to your squad.");
+
+        if (chosen.FirstOrDefault(p => !p.IsAvailable) is { } unavailable)
+            throw new InvalidOperationException($"{unavailable.Name} is not available to play.");
+
+        // Exactly one keeper: eleven outfield players is not a football team,
+        // and two men in goal leaves a hole somewhere else.
+        var keepers = chosen.Count(p => p.Position == Position.GK);
+
+        if (keepers != 1)
+            throw new InvalidOperationException(
+                $"A line-up needs exactly one goalkeeper, but {keepers} were chosen.");
+
+        // The rest of the shape is not enforced. A manager short of midfielders
+        // may push a winger inside or a full-back forward, as they would in any
+        // football game; playing out of role already costs those players part
+        // of their rating, which is punishment enough without refusing the
+        // team sheet outright.
+
+        // The order the ids arrive in is the order they stand on the pitch, so
+        // the index gives the slot. Slots are numbered from one, because zero
+        // means a player stands nowhere — which is what a substitute does, and
+        // what the shape reads as "no particular job".
+        var order = starterIds.ToList();
+
+        foreach (var player in team.Players)
+        {
+            var index = order.IndexOf(player.Id);
+
+            player.IsStarter = index >= 0;
+            player.LineupSlot = index >= 0 ? index + 1 : 0;
+        }
+
+        team.Formation = formation;
+        await db.SaveChangesAsync(ct);
+
+        return team.ToDto();
+    }
+
     public async Task<IReadOnlyList<TeamDto>> GetTeamsAsync(string userId, Guid seasonId, string? country, CancellationToken ct = default)
     {
         await EnsureSeasonAsync(userId, seasonId, ct);
@@ -216,7 +284,12 @@ public class SeasonService(
         var userTeamId = await UserTeamIdAsync(competition.SeasonId, ct);
         var result = await PlayWeekAsync(competition, userTeamId, includeUserMatch, ct);
 
+        await PayIfFinishedAsync(competition, ct);
         await db.SaveChangesAsync(ct);
+
+        var season = await EnsureSeasonAsync(userId, competition.SeasonId, tracked: true, ct);
+        await AdvanceSeasonWeekAsync(season, ct);
+
         return result;
     }
 
@@ -237,8 +310,43 @@ public class SeasonService(
         foreach (var competition in leagues.Where(c => !c.IsFinished))
             results.Add(await PlayWeekAsync(competition, season.UserTeamId, includeUserMatch, ct));
 
+        foreach (var competition in leagues)
+            await PayIfFinishedAsync(competition, ct);
+
         await db.SaveChangesAsync(ct);
+        await AdvanceSeasonWeekAsync(season, ct);
+
         return results;
+    }
+
+    /// <summary>
+    /// Hands out the end-of-season money the week a league finishes. It is
+    /// safe to call on a league that has already been paid, which is what lets
+    /// it sit on the simulation path without a check at every call site.
+    /// </summary>
+    private Task PayIfFinishedAsync(Competition competition, CancellationToken ct) =>
+        new SeasonPayout(db, standingsCalculator).PayLeagueAsync(competition, ct);
+
+    /// <summary>
+    /// Moves the save on a week and lets the market run.
+    ///
+    /// The season carries its own week because the transfer window is one thing
+    /// for the whole save: a manager following three leagues at once should not
+    /// find the market open in one of them and shut in another.
+    /// </summary>
+    private async Task AdvanceSeasonWeekAsync(Season season, CancellationToken ct)
+    {
+        season.CurrentWeek++;
+
+        var totalWeeks = await db.Competitions
+            .Where(c => c.SeasonId == season.Id && c.Kind == CompetitionKind.League)
+            .Select(c => c.TeamCount > 1 ? 2 * (c.TeamCount - 1) : 0)
+            .FirstOrDefaultAsync(ct);
+
+        await db.SaveChangesAsync(ct);
+
+        await new TransferMarketRunner(db)
+            .RunWeekAsync(season, totalWeeks, Random.Shared, ct);
     }
 
     public async Task<LeagueStatisticsDto> GetStatisticsAsync(string userId, Guid seasonId, Guid? competitionId, CancellationToken ct = default)
@@ -394,6 +502,28 @@ public class SeasonService(
         SquadAftermath.Apply(
             match.HomeTeam.Players.Concat(match.AwayTeam.Players),
             result.Aftermath);
+
+        PayResult(match);
+    }
+
+    /// <summary>
+    /// Pays both clubs what the result was worth.
+    ///
+    /// Only league matches pay per result: a cup run is paid for the round it
+    /// reaches, not match by match, so a club cannot earn twice for the same
+    /// tie. The money goes in as the match is settled, wherever it was settled
+    /// from — a simulated week, a cup round, or the manager's own live match.
+    /// </summary>
+    public static void PayResult(Match match)
+    {
+        if (match.Competition is not { Kind: CompetitionKind.League } league)
+            return;
+
+        match.HomeTeam.Budget += PrizeMoney.ForResult(
+            league.Country, match.HomeGoals, match.AwayGoals);
+
+        match.AwayTeam.Budget += PrizeMoney.ForResult(
+            league.Country, match.AwayGoals, match.HomeGoals);
     }
 
     private async Task<SeasonSummaryDto> BuildSummaryAsync(Season season, CancellationToken ct)

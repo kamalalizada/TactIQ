@@ -49,6 +49,14 @@ public class SeasonsController(ISeasonService seasons) : ControllerBase
         CancellationToken ct) =>
         Ok(await seasons.SetUserTeamAsync(UserId, seasonId, request.TeamId, ct));
 
+    /// <summary>Sets the managed club's formation and starting eleven.</summary>
+    [HttpPatch("{seasonId:guid}/lineup")]
+    public async Task<ActionResult<TeamDto>> SetLineup(
+        Guid seasonId,
+        SetLineupRequest request,
+        CancellationToken ct) =>
+        Ok(await seasons.SetLineupAsync(UserId, seasonId, request.Formation, request.StarterIds, ct));
+
     [HttpGet("{seasonId:guid}/statistics")]
     public async Task<ActionResult<LeagueStatisticsDto>> Statistics(
         Guid seasonId,

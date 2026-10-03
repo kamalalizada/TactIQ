@@ -17,6 +17,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<Match> Matches => Set<Match>();
     public DbSet<MatchEvent> MatchEvents => Set<MatchEvent>();
     public DbSet<TeamTactics> TeamTactics => Set<TeamTactics>();
+    public DbSet<TransferOffer> TransferOffers => Set<TransferOffer>();
+    public DbSet<Transfer> Transfers => Set<Transfer>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -79,6 +81,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(t => t.Name).IsRequired().HasMaxLength(120);
             e.Property(t => t.Country).IsRequired().HasMaxLength(60);
             e.Property(t => t.LogoUrl).HasMaxLength(500);
+            e.Property(t => t.Budget).HasPrecision(18, 2);
             e.HasIndex(t => new { t.SeasonId, t.Country });
 
             e.HasMany(t => t.Players)
@@ -90,6 +93,46 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Ignore(t => t.AttackRating);
             e.Ignore(t => t.DefenseRating);
             e.Ignore(t => t.TeamOverall);
+        });
+
+        builder.Entity<TransferOffer>(e =>
+        {
+            // Money is counted exactly: a fee printed as EUR 27.7M must not drift.
+            e.Property(o => o.Amount).HasPrecision(18, 2);
+            e.Property(o => o.ResponseReason).HasMaxLength(200);
+
+            // Offers are read per season, and per club for the manager's inbox.
+            e.HasIndex(o => new { o.SeasonId, o.Status });
+            e.HasIndex(o => o.FromTeamId);
+            e.HasIndex(o => o.ToTeamId);
+            e.Ignore(o => o.IsOpen);
+
+            e.HasOne(o => o.Season)
+                .WithMany()
+                .HasForeignKey(o => o.SeasonId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // A sold player keeps his offers; deleting the season clears them.
+            e.HasOne(o => o.Player)
+                .WithMany()
+                .HasForeignKey(o => o.PlayerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<Transfer>(e =>
+        {
+            e.Property(t => t.Amount).HasPrecision(18, 2);
+            e.Property(t => t.PlayerName).IsRequired().HasMaxLength(120);
+            e.Property(t => t.FromTeamName).IsRequired().HasMaxLength(120);
+            e.Property(t => t.ToTeamName).IsRequired().HasMaxLength(120);
+            e.HasIndex(t => t.SeasonId);
+
+            // Clubs and players are named here as they were at the time, so the
+            // record survives whatever happens to them afterwards.
+            e.HasOne(t => t.Season)
+                .WithMany()
+                .HasForeignKey(t => t.SeasonId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<Player>(e =>

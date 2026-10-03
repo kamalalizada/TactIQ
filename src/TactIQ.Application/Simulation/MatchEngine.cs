@@ -35,9 +35,13 @@ public class MatchEngine : IMatchEngine
     /// the day's form.</summary>
     public MatchSide CreateSide(Team team, bool isHome, TacticalStyle style)
     {
-        SelectAvailableEleven(team);
-        return new MatchSide(team, isHome, style, RandomForm());
+        var side = new MatchSide(team, isHome, style, RandomForm());
+        EnsureValidEleven(side);
+        return side;
     }
+
+    /// <summary>Scales a FIFA-style 50-100 rating into an exponentially weighted score.</summary>
+    internal static double Scale(double rating) => Math.Pow(Math.Max(1.0, rating - 45.0), 2.5);
 
     /// <summary>Runs one minute for both sides and returns whatever happened.</summary>
     public IReadOnlyList<SimulatedEvent> PlayMinute(MatchSide home, MatchSide away, int minute)
@@ -52,8 +56,14 @@ public class MatchEngine : IMatchEngine
         if (_random.NextDouble() >= attackChance)
             return events;
 
-        var total = home.Possession + away.Possession;
-        var homeHasBall = _random.NextDouble() < home.Possession / total;
+        // Use power scaling to amplify the difference between strong and weak teams.
+        // A linear ratio (80 vs 70) makes every match a coin toss (53% vs 47%).
+        // Subtracting 45 stretches the 50-100 scale, and cubing it forces the better team to dominate.
+        var homeWeight = Scale(home.Possession);
+        var awayWeight = Scale(away.Possession);
+        var total = homeWeight + awayWeight;
+        
+        var homeHasBall = _random.NextDouble() < homeWeight / total;
 
         var (attacking, defending) = homeHasBall ? (home, away) : (away, home);
 
@@ -91,12 +101,16 @@ public class MatchEngine : IMatchEngine
     public TeamStrength ComputeStrength(Team team, bool isHome, TacticalStyle style, double formModifier)
     {
         var side = new MatchSide(team, isHome, style, formModifier);
+        EnsureValidEleven(side);
         return new TeamStrength(side.Attack, side.Defense);
     }
 
     public double GoalChancePerMinute(TeamStrength attacking, TeamStrength defending)
     {
-        var pressure = attacking.Attack / (attacking.Attack + defending.Defense);
+        var attWeight = Scale(attacking.Attack);
+        var defWeight = Scale(defending.Defense);
+        var pressure = attWeight / (attWeight + defWeight);
+        
         var attacksPerMinute = EngineConstants.BaseAttacksPerMatch / EngineConstants.RegularTimeMinutes;
         return attacksPerMinute * pressure * EngineConstants.BaseChanceConversion;
     }
@@ -111,12 +125,12 @@ public class MatchEngine : IMatchEngine
 
     /// <summary>Injured and suspended players cannot start, so promote fit
     /// replacements before kick-off.</summary>
-    private static void SelectAvailableEleven(Team team)
+    private static void EnsureValidEleven(MatchSide side)
     {
-        foreach (var unavailable in team.Players.Where(p => p.IsStarter && !p.IsAvailable).ToList())
+        foreach (var unavailable in side.Players.Where(p => p.OnPitch && !p.Source.IsAvailable).ToList())
         {
-            var replacement = team.Players
-                .Where(p => !p.IsStarter && p.IsAvailable)
+            var replacement = side.Players
+                .Where(p => !p.OnPitch && p.Source.IsAvailable)
                 .OrderByDescending(p => p.Position == unavailable.Position)
                 .ThenByDescending(p => p.Overall)
                 .FirstOrDefault();
@@ -124,8 +138,8 @@ public class MatchEngine : IMatchEngine
             if (replacement is null)
                 continue;
 
-            unavailable.IsStarter = false;
-            replacement.IsStarter = true;
+            unavailable.OnPitch = false;
+            replacement.OnPitch = true;
         }
     }
 

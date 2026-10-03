@@ -16,6 +16,20 @@ public class Team
     /// meet domestically.</summary>
     public string Country { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The shape the manager wants to play, as "4-4-2". Kept on the club so a
+    /// chosen line-up survives between matches; the per-match tactics record
+    /// still holds whatever was actually used on the day.
+    /// </summary>
+    public string Formation { get; set; } = "4-4-2";
+
+    /// <summary>
+    /// What the club can spend on transfers, in euros. Selling adds to it and
+    /// buying takes from it, so a manager who wants a striker has to find the
+    /// money somewhere.
+    /// </summary>
+    public decimal Budget { get; set; }
+
     public List<Player> Players { get; set; } = [];
 
     public double AttackRating => RatingFor(

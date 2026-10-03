@@ -22,8 +22,25 @@ public class CupController(ICupService cup) : ControllerBase
     public async Task<ActionResult<CupBracketDto>> Bracket(Guid seasonId, CancellationToken ct) =>
         Ok(await cup.GetBracketAsync(UserId, seasonId, ct));
 
-    /// <summary>Plays the current round, leaving your own tie to be played live.</summary>
+    /// <summary>
+    /// Plays the current round. Your own tie is left to be played live; pass
+    /// includeUserMatch=true to have it settled with the rest instead.
+    /// </summary>
     [HttpPost("play-round")]
-    public async Task<ActionResult<CupRoundResult>> PlayRound(Guid seasonId, CancellationToken ct) =>
-        Ok(await cup.PlayRoundAsync(UserId, seasonId, ct));
+    public async Task<ActionResult<CupRoundResult>> PlayRound(
+        Guid seasonId,
+        [FromQuery] bool includeUserMatch,
+        CancellationToken ct) =>
+        Ok(await cup.PlayRoundAsync(UserId, seasonId, includeUserMatch, ct));
+
+    /// <summary>
+    /// Simulates all remaining matches in the cup until it finishes, 
+    /// or until a match involving the user's team is reached (if includeUserMatch is false).
+    /// </summary>
+    [HttpPost("play-all")]
+    public async Task<ActionResult<CupRoundResult>> PlayAll(
+        Guid seasonId,
+        [FromQuery] bool includeUserMatch,
+        CancellationToken ct) =>
+        Ok(await cup.PlayAllAsync(UserId, seasonId, includeUserMatch, ct));
 }
