@@ -15,6 +15,7 @@ public interface IAppDbContext
     DbSet<TeamTactics> TeamTactics { get; }
     DbSet<TransferOffer> TransferOffers { get; }
     DbSet<Transfer> Transfers { get; }
+    DbSet<SeasonRecord> SeasonRecords { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

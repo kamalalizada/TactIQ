@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using TactIQ.Application.Abstractions;
+using TactIQ.Application.Careers;
 using TactIQ.Application.Cup;
 using TactIQ.Application.Seasons;
 using TactIQ.Application.Transfers;
@@ -47,6 +48,7 @@ public static class DependencyInjection
         services.AddScoped<ISeasonService, SeasonService>();
         services.AddScoped<ICupService, CupService>();
         services.AddScoped<ITransferService, TransferService>();
+        services.AddScoped<ICareerService, CareerService>();
 
         return services;
     }

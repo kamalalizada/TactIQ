@@ -426,11 +426,62 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("UserTeamId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("Year")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("UserId");
 
                     b.ToTable("Seasons");
+                });
+
+            modelBuilder.Entity("TactIQ.Domain.Entities.SeasonRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ChampionTeamId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ChampionTeamName")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("CompetitionName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("Country")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<DateTime>("RecordedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("SeasonId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("UserBudget")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int?>("UserPoints")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("UserRank")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SeasonId", "Year");
+
+                    b.ToTable("SeasonRecords");
                 });
 
             modelBuilder.Entity("TactIQ.Domain.Entities.Team", b =>
@@ -802,6 +853,17 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                     b.Navigation("Team");
                 });
 
+            modelBuilder.Entity("TactIQ.Domain.Entities.SeasonRecord", b =>
+                {
+                    b.HasOne("TactIQ.Domain.Entities.Season", "Season")
+                        .WithMany("History")
+                        .HasForeignKey("SeasonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Season");
+                });
+
             modelBuilder.Entity("TactIQ.Domain.Entities.Team", b =>
                 {
                     b.HasOne("TactIQ.Domain.Entities.Season", "Season")
@@ -871,6 +933,8 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("TactIQ.Domain.Entities.Season", b =>
                 {
                     b.Navigation("Competitions");
+
+                    b.Navigation("History");
 
                     b.Navigation("Teams");
                 });

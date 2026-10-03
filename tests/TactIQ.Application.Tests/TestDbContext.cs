@@ -24,6 +24,7 @@ internal sealed class TestDbContext(DbContextOptions<TestDbContext> options)
     public DbSet<TeamTactics> TeamTactics => Set<TeamTactics>();
     public DbSet<TransferOffer> TransferOffers => Set<TransferOffer>();
     public DbSet<Transfer> Transfers => Set<Transfer>();
+    public DbSet<SeasonRecord> SeasonRecords => Set<SeasonRecord>();
 
     public static TestDbContext Create() =>
         new(new DbContextOptionsBuilder<TestDbContext>()

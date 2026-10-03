@@ -28,8 +28,18 @@ public class Season
     /// </summary>
     public int CurrentWeek { get; set; }
 
+    /// <summary>
+    /// Which season of the career this is, counting from one. A save is not one
+    /// season but a run of them: the fixtures are redrawn each year while the
+    /// squads, the money and the record of what happened carry over.
+    /// </summary>
+    public int Year { get; set; } = 1;
+
     public List<Team> Teams { get; set; } = [];
     public List<Competition> Competitions { get; set; } = [];
+
+    /// <summary>What happened in the seasons already played.</summary>
+    public List<SeasonRecord> History { get; set; } = [];
 
     public bool IsFinished => Competitions.Count > 0 && Competitions.All(c => c.IsFinished);
 }

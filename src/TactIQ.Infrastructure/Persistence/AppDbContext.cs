@@ -19,6 +19,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<TeamTactics> TeamTactics => Set<TeamTactics>();
     public DbSet<TransferOffer> TransferOffers => Set<TransferOffer>();
     public DbSet<Transfer> Transfers => Set<Transfer>();
+    public DbSet<SeasonRecord> SeasonRecords => Set<SeasonRecord>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -132,6 +133,22 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.HasOne(t => t.Season)
                 .WithMany()
                 .HasForeignKey(t => t.SeasonId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<SeasonRecord>(e =>
+        {
+            e.Property(r => r.CompetitionName).IsRequired().HasMaxLength(120);
+            e.Property(r => r.Country).HasMaxLength(60);
+            e.Property(r => r.ChampionTeamName).HasMaxLength(120);
+            e.Property(r => r.UserBudget).HasPrecision(18, 2);
+
+            // A career is read year by year, newest first.
+            e.HasIndex(r => new { r.SeasonId, r.Year });
+
+            e.HasOne(r => r.Season)
+                .WithMany(s => s.History)
+                .HasForeignKey(r => r.SeasonId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
