@@ -349,6 +349,52 @@ public class SeasonService(
             .RunWeekAsync(season, totalWeeks, Random.Shared, ct);
     }
 
+    /// <summary>How many of each kind a search returns; a longer list is noise.</summary>
+    private const int SearchLimit = 6;
+
+    public async Task<SearchResultDto> SearchAsync(
+        string userId, Guid seasonId, string query, CancellationToken ct = default)
+    {
+        var season = await EnsureSeasonAsync(userId, seasonId, ct);
+
+        var term = query?.Trim() ?? string.Empty;
+
+        // A single letter matches half the game, which is no use to anybody.
+        if (term.Length < 2)
+            return new SearchResultDto([], []);
+
+        var lowered = term.ToLowerInvariant();
+
+        var teams = await db.Teams
+            .AsNoTracking()
+            .Include(t => t.Players)
+            .Where(t => t.SeasonId == seasonId && t.Name.ToLower().Contains(lowered))
+            .OrderBy(t => t.Name)
+            .Take(SearchLimit)
+            .ToListAsync(ct);
+
+        var players = await db.Players
+            .AsNoTracking()
+            .Include(p => p.Team)
+            .Where(p => p.Team.SeasonId == seasonId && p.Name.ToLower().Contains(lowered))
+            // The best match first: a manager searching a name wants the player
+            // he has heard of, not the reserve who shares a surname.
+            .OrderByDescending(p => p.Overall)
+            .Take(SearchLimit)
+            .ToListAsync(ct);
+
+        return new SearchResultDto(
+            teams
+                .Select(t => new TeamHitDto(t.Id, t.Name, t.Country, t.LogoUrl, t.TeamOverall))
+                .ToList(),
+            players
+                .Select(p => new PlayerHitDto(
+                    p.Id, p.Name, p.Position, p.Role, p.Age, p.Overall,
+                    p.TeamId, p.Team.Name, p.Team.LogoUrl,
+                    p.TeamId == season.UserTeamId))
+                .ToList());
+    }
+
     public async Task<LeagueStatisticsDto> GetStatisticsAsync(string userId, Guid seasonId, Guid? competitionId, CancellationToken ct = default)
     {
         await EnsureSeasonAsync(userId, seasonId, ct);
@@ -454,7 +500,7 @@ public class SeasonService(
         if (weekComplete)
         {
             competition.CurrentWeek = week + 1;
-            await RecoverSquadsAsync(competition.SeasonId, ct);
+            await RecoverSquadsAsync(competition, ct);
         }
 
         return new SimulateWeekResult(
@@ -466,10 +512,20 @@ public class SeasonService(
             competition.IsFinished);
     }
 
-    private async Task RecoverSquadsAsync(Guid seasonId, CancellationToken ct)
+    /// <summary>
+    /// Ticks down bans and knocks and gives everyone some condition back, for
+    /// the clubs that just played.
+    ///
+    /// Only this competition's clubs: a season runs three leagues, and
+    /// recovering all of them each time a league played a week healed every
+    /// injury three times over. A four-match knock was gone before the manager
+    /// saw it.
+    /// </summary>
+    private async Task RecoverSquadsAsync(Competition competition, CancellationToken ct)
     {
         var squads = await db.Players
-            .Where(p => db.Teams.Any(t => t.Id == p.TeamId && t.SeasonId == seasonId))
+            .Where(p => db.CompetitionEntries
+                .Any(e => e.CompetitionId == competition.Id && e.TeamId == p.TeamId))
             .ToListAsync(ct);
 
         SquadAftermath.RecoverWeek(squads);

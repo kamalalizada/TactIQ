@@ -57,6 +57,15 @@ public class SeasonsController(ISeasonService seasons) : ControllerBase
         CancellationToken ct) =>
         Ok(await seasons.SetLineupAsync(UserId, seasonId, request.Formation, request.StarterIds, ct));
 
+    /// <summary>
+    /// Finds clubs and players by name, for the search box in the header.
+    /// Two characters are enough; a single letter matches too much to help.
+    /// </summary>
+    [HttpGet("{seasonId:guid}/search")]
+    public async Task<ActionResult<SearchResultDto>> Search(
+        Guid seasonId, [FromQuery] string q, CancellationToken ct) =>
+        Ok(await seasons.SearchAsync(UserId, seasonId, q ?? string.Empty, ct));
+
     [HttpGet("{seasonId:guid}/statistics")]
     public async Task<ActionResult<LeagueStatisticsDto>> Statistics(
         Guid seasonId,
