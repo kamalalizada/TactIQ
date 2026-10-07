@@ -7,10 +7,16 @@ public record CreateSeasonRequest(string Name, GameMode GameMode, Guid? UserTeam
 public record SetUserTeamRequest(Guid TeamId);
 
 /// <summary>
-/// The shape to play and the eleven who start in it, listed in pitch order:
-/// keeper first, then each line from left to right.
+/// The shape the manager started from and the eleven who start, each with the
+/// spot they were placed on. The spot decides the job; see <c>PitchZones</c>.
 /// </summary>
-public record SetLineupRequest(string Formation, IReadOnlyList<Guid> StarterIds);
+public record SetLineupRequest(string Formation, IReadOnlyList<LineupSpotRequest> Starters);
+
+/// <summary>
+/// One starter and where they stand, as percentages of the pitch: <c>X</c>
+/// from the left touchline, <c>Y</c> up from the side's own goal line.
+/// </summary>
+public record LineupSpotRequest(Guid PlayerId, double X, double Y);
 
 public record CompetitionSummaryDto(
     Guid Id,
@@ -52,6 +58,9 @@ public record PlayerDto(
     int Overall,
     bool IsStarter,
     int LineupSlot,
+    double? PitchX,
+    double? PitchY,
+    PlayerRole? LineupRole,
     int Condition,
     int MatchesInjured,
     int MatchesSuspended,

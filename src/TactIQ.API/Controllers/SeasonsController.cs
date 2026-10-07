@@ -55,7 +55,7 @@ public class SeasonsController(ISeasonService seasons) : ControllerBase
         Guid seasonId,
         SetLineupRequest request,
         CancellationToken ct) =>
-        Ok(await seasons.SetLineupAsync(UserId, seasonId, request.Formation, request.StarterIds, ct));
+        Ok(await seasons.SetLineupAsync(UserId, seasonId, request.Formation, request.Starters, ct));
 
     /// <summary>
     /// Finds clubs and players by name, for the search box in the header.

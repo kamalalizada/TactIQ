@@ -165,8 +165,7 @@ public class TransferMarketRunner(IAppDbContext db)
         buyer.Players.Add(player);
 
         player.TeamId = buyer.Id;
-        player.IsStarter = false;
-        player.LineupSlot = 0;
+        player.LeaveLineup();
 
         db.Transfers.Add(new Transfer
         {

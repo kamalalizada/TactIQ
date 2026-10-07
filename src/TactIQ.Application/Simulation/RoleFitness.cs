@@ -18,6 +18,12 @@ public static class RoleFitness
     /// <summary>A neighbouring role: the same job, shifted across or along.</summary>
     private const double Adjacent = 0.94;
 
+    /// <summary>
+    /// A wide player sent to the other flank: still the same job, but on the
+    /// wrong foot, cutting in where they would go outside.
+    /// </summary>
+    private const double OtherFlank = 0.90;
+
     /// <summary>The same line, but a different kind of job within it.</summary>
     private const double SameLine = 0.87;
 
@@ -61,6 +67,16 @@ public static class RoleFitness
         _ => Position.FWD
     };
 
+    private enum Flank { Left, Right }
+
+    /// <summary>Which flank a wide attacking role works, or null for anyone else.</summary>
+    private static Flank? FlankOf(PlayerRole role) => role switch
+    {
+        PlayerRole.LW or PlayerRole.LM => Flank.Left,
+        PlayerRole.RW or PlayerRole.RM => Flank.Right,
+        _ => null
+    };
+
     /// <summary>
     /// The share of a player's ability that survives being played in
     /// <paramref name="playedAs"/> when their own role is <paramref name="natural"/>.
@@ -69,6 +85,14 @@ public static class RoleFitness
     {
         if (natural == playedAs)
             return Native;
+
+        // Winger and wide midfielder are one job on a given flank: a left
+        // winger dropped into left midfield, or the reverse, is still at home.
+        var naturalFlank = FlankOf(natural);
+        var playedFlank = FlankOf(playedAs);
+
+        if (naturalFlank is not null && playedFlank is not null)
+            return naturalFlank == playedFlank ? Native : OtherFlank;
 
         if (natural == PlayerRole.GK || playedAs == PlayerRole.GK)
             return Goalkeeping;

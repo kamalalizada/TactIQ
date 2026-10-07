@@ -26,15 +26,16 @@ public interface ISeasonService
     Task<SeasonSummaryDto> SetUserTeamAsync(string userId, Guid seasonId, Guid teamId, CancellationToken ct = default);
 
     /// <summary>
-    /// Sets the managed club's shape and the eleven who start in it. The
-    /// line-up has to match the formation line for line, and every player has
-    /// to be fit to play.
+    /// Sets the managed club's eleven and where each of them stands. The spot
+    /// decides the job, so the side has to add up to one keeper, a back line
+    /// of at least three and one of each flank role; every player has to be
+    /// fit to play.
     /// </summary>
     Task<TeamDto> SetLineupAsync(
         string userId,
         Guid seasonId,
         string formation,
-        IReadOnlyList<Guid> starterIds,
+        IReadOnlyList<LineupSpotRequest> starters,
         CancellationToken ct = default);
 
     Task<IReadOnlyList<StandingsRowDto>> GetStandingsAsync(string userId, Guid competitionId, CancellationToken ct = default);

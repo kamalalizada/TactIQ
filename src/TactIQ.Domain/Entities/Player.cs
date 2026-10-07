@@ -38,6 +38,22 @@ public class Player
     /// </summary>
     public int LineupSlot { get; set; }
 
+    /// <summary>
+    /// Where the manager placed a starter, as a percentage across the pitch
+    /// from the left touchline. Null when the shape's slot decides instead —
+    /// on the bench, or at any club whose line-up was not arranged by hand.
+    /// </summary>
+    public double? PitchX { get; set; }
+
+    /// <summary>How far up the pitch a placed starter stands, as a percentage from their own goal line.</summary>
+    public double? PitchY { get; set; }
+
+    /// <summary>
+    /// The job the spot a starter was placed on asks of them. When set, it
+    /// overrides the role the formation's slot would give.
+    /// </summary>
+    public PlayerRole? LineupRole { get; set; }
+
     /// <summary>The player's headline rating, kept as given rather than averaged
     /// from the six attributes — a striker's low defending must not drag it down.</summary>
     public int Overall { get; set; }
@@ -56,4 +72,14 @@ public class Player
     public int YellowCards { get; set; }
 
     public bool IsAvailable => MatchesInjured == 0 && MatchesSuspended == 0;
+
+    /// <summary>Takes the player out of the starting eleven and forgets where they stood in it.</summary>
+    public void LeaveLineup()
+    {
+        IsStarter = false;
+        LineupSlot = 0;
+        PitchX = null;
+        PitchY = null;
+        LineupRole = null;
+    }
 }

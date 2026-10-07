@@ -19,16 +19,18 @@ public class MatchSide
     }
 
     /// <summary>
-    /// Tells each starter which job they are filling tonight. A shirt in a slot
-    /// the shape means for somebody else plays below their rating, which is what
-    /// makes fielding a left-back on the right, or a winger up front, cost
-    /// something. Substitutes keep their own role until they come on.
+    /// Tells each starter which job they are filling tonight: the one their
+    /// spot asks for when the manager placed them by hand, otherwise the one
+    /// their slot in the shape asks for. A player in a job meant for somebody
+    /// else plays below their rating, which is what makes fielding a left-back
+    /// on the right, or a winger up front, cost something. Substitutes keep
+    /// their own role until they come on.
     /// </summary>
     private void ApplyFormation(string formation)
     {
         foreach (var player in Players.Where(p => p.OnPitch))
-            player.PlayedRole =
-                FormationShape.RoleForSlot(formation, player.LineupSlot, player.NaturalRole);
+            player.PlayedRole = player.LineupRole
+                ?? FormationShape.RoleForSlot(formation, player.LineupSlot, player.NaturalRole);
     }
 
     public Team Team { get; }

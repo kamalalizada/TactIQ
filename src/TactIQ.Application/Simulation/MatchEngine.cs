@@ -140,6 +140,9 @@ public class MatchEngine : IMatchEngine
 
             unavailable.OnPitch = false;
             replacement.OnPitch = true;
+            // The replacement steps into the job, not just the shirt: whoever
+            // covers an injured keeper goes in goal.
+            replacement.PlayedRole = unavailable.PlayedRole;
         }
     }
 

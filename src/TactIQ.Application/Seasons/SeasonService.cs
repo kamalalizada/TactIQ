@@ -145,7 +145,7 @@ public class SeasonService(
         string userId,
         Guid seasonId,
         string formation,
-        IReadOnlyList<Guid> starterIds,
+        IReadOnlyList<LineupSpotRequest> starters,
         CancellationToken ct = default)
     {
         var season = await EnsureSeasonAsync(userId, seasonId, tracked: true, ct);
@@ -156,9 +156,22 @@ public class SeasonService(
         if (!FormationRules.IsKnown(formation))
             throw new ArgumentException($"Unknown formation '{formation}'.", nameof(formation));
 
-        if (starterIds.Distinct().Count() != FormationRules.StarterCount)
+        var starterIds = starters.Select(s => s.PlayerId).ToList();
+
+        if (starterIds.Distinct().Count() != FormationRules.StarterCount
+            || starters.Count != FormationRules.StarterCount)
             throw new InvalidOperationException(
                 $"A line-up needs exactly {FormationRules.StarterCount} different players.");
+
+        if (starters.Any(s => !PitchZones.IsOnPitch(s.X, s.Y)))
+            throw new ArgumentException("Every starter has to stand on the pitch.", nameof(starters));
+
+        // The spot decides the job, so this is where a side with two keepers,
+        // two left-backs or a back line of two is turned away.
+        var roles = starters.ToDictionary(s => s.PlayerId, s => PitchZones.RoleAt(s.X, s.Y));
+
+        if (LineupRules.Problem(roles.Values) is { } problem)
+            throw new InvalidOperationException(problem);
 
         var team = await db.Teams
             .Include(t => t.Players)
@@ -173,32 +186,27 @@ public class SeasonService(
         if (chosen.FirstOrDefault(p => !p.IsAvailable) is { } unavailable)
             throw new InvalidOperationException($"{unavailable.Name} is not available to play.");
 
-        // Exactly one keeper: eleven outfield players is not a football team,
-        // and two men in goal leaves a hole somewhere else.
-        var keepers = chosen.Count(p => p.Position == Position.GK);
-
-        if (keepers != 1)
-            throw new InvalidOperationException(
-                $"A line-up needs exactly one goalkeeper, but {keepers} were chosen.");
-
-        // The rest of the shape is not enforced. A manager short of midfielders
-        // may push a winger inside or a full-back forward, as they would in any
-        // football game; playing out of role already costs those players part
-        // of their rating, which is punishment enough without refusing the
-        // team sheet outright.
-
-        // The order the ids arrive in is the order they stand on the pitch, so
-        // the index gives the slot. Slots are numbered from one, because zero
-        // means a player stands nowhere — which is what a substitute does, and
-        // what the shape reads as "no particular job".
-        var order = starterIds.ToList();
+        // Anyone may stand anywhere the rules above allow. A centre-back pushed
+        // into midfield plays there, below his rating; that cost is the
+        // punishment, rather than refusing the team sheet outright.
+        //
+        // The slot is still kept in the order the ids arrived, for anything
+        // that reads the line-up by shirt rather than by spot.
+        var spots = starters.ToDictionary(s => s.PlayerId);
 
         foreach (var player in team.Players)
         {
-            var index = order.IndexOf(player.Id);
+            if (!spots.TryGetValue(player.Id, out var spot))
+            {
+                player.LeaveLineup();
+                continue;
+            }
 
-            player.IsStarter = index >= 0;
-            player.LineupSlot = index >= 0 ? index + 1 : 0;
+            player.IsStarter = true;
+            player.LineupSlot = starterIds.IndexOf(player.Id) + 1;
+            player.PitchX = spot.X;
+            player.PitchY = spot.Y;
+            player.LineupRole = roles[player.Id];
         }
 
         team.Formation = formation;

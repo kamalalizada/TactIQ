@@ -202,10 +202,7 @@ public class SeasonRollover(
             : Simulation.FormationShape.Of("4-4-2");
 
         foreach (var player in available)
-        {
-            player.IsStarter = false;
-            player.LineupSlot = 0;
-        }
+            player.LeaveLineup();
 
         var taken = new HashSet<Guid>();
         var slot = 1;

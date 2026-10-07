@@ -342,6 +342,9 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsStarter")
                         .HasColumnType("boolean");
 
+                    b.Property<int?>("LineupRole")
+                        .HasColumnType("integer");
+
                     b.Property<int>("LineupSlot")
                         .HasColumnType("integer");
 
@@ -372,6 +375,12 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("Physical")
                         .HasColumnType("integer");
+
+                    b.Property<double?>("PitchX")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("PitchY")
+                        .HasColumnType("double precision");
 
                     b.Property<int>("Position")
                         .HasColumnType("integer");

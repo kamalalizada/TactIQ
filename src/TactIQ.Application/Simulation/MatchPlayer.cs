@@ -9,11 +9,20 @@ public class MatchPlayer(Player player)
 {
     public Guid Id { get; } = player.Id;
     public string Name { get; } = player.Name;
-    public Position Position { get; } = player.Position;
+    /// <summary>
+    /// The line they are playing in today. That follows the job, not the
+    /// player: a centre-back put in goal is the keeper, and a winger pushed up
+    /// front is counted among the forwards.
+    /// </summary>
+    public Position Position =>
+        PlayedRole == NaturalRole ? player.Position : RoleFitness.LineOf(PlayedRole);
     public int ShirtNumber { get; } = player.ShirtNumber;
 
     /// <summary>Where the manager placed them, which decides the job they fill.</summary>
     public int LineupSlot { get; } = player.LineupSlot;
+
+    /// <summary>The job the spot they were placed on asks of them, if placed by hand.</summary>
+    public PlayerRole? LineupRole { get; } = player.LineupRole;
 
     /// <summary>The role this player is best at.</summary>
     public PlayerRole NaturalRole { get; } = player.Role;

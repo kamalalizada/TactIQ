@@ -30,6 +30,26 @@ public class RoleFitnessTests
         Assert.True(upFront < RoleFitness.Native);
     }
 
+    [Theory]
+    [InlineData(PlayerRole.LW, PlayerRole.LM)]
+    [InlineData(PlayerRole.LM, PlayerRole.LW)]
+    [InlineData(PlayerRole.RW, PlayerRole.RM)]
+    [InlineData(PlayerRole.RM, PlayerRole.RW)]
+    public void WingAndWideMidfieldAreOneJobOnTheSameFlank(PlayerRole natural, PlayerRole playedAs)
+    {
+        Assert.Equal(RoleFitness.Native, RoleFitness.For(natural, playedAs));
+    }
+
+    [Theory]
+    [InlineData(PlayerRole.LW, PlayerRole.RW)]
+    [InlineData(PlayerRole.LW, PlayerRole.RM)]
+    [InlineData(PlayerRole.LM, PlayerRole.RM)]
+    [InlineData(PlayerRole.RW, PlayerRole.LM)]
+    public void AWidePlayerOnTheOtherFlankLosesATenth(PlayerRole natural, PlayerRole playedAs)
+    {
+        Assert.Equal(0.90, RoleFitness.For(natural, playedAs), precision: 3);
+    }
+
     [Fact]
     public void GoalkeepingIsADifferentSportInBothDirections()
     {
@@ -100,6 +120,36 @@ public class RoleFitnessTests
         var reshaped = new MatchSide(misshapen, isHome: true, TacticalStyle.Balanced, form: 0);
 
         Assert.True(reshaped.Attack < asBuilt.Attack);
+    }
+
+    [Fact]
+    public void AHandPlacedRoleOverridesTheSlot()
+    {
+        var team = TestTeamFactory.Create("Home", 80);
+        var striker = team.Players.First(p => p.Role == PlayerRole.ST);
+        striker.LineupRole = PlayerRole.CAM;
+
+        var side = new MatchSide(team, isHome: true, TacticalStyle.Balanced, form: 0);
+        var played = side.Players.Single(p => p.Id == striker.Id);
+
+        Assert.Equal(PlayerRole.CAM, played.PlayedRole);
+        Assert.Equal(Position.MID, played.Position);
+    }
+
+    [Fact]
+    public void ACentreBackPlacedInGoalIsTheKeeper()
+    {
+        var team = TestTeamFactory.Create("Home", 80);
+        var keeper = team.Players.Single(p => p.Role == PlayerRole.GK);
+        var centreBack = team.Players.First(p => p.Role == PlayerRole.CB);
+
+        keeper.LineupRole = PlayerRole.CB;
+        centreBack.LineupRole = PlayerRole.GK;
+
+        var side = new MatchSide(team, isHome: true, TacticalStyle.Balanced, form: 0);
+
+        Assert.Equal(centreBack.Id, side.Keeper?.Id);
+        Assert.True(side.Keeper!.Overall < centreBack.Overall);
     }
 
     [Fact]

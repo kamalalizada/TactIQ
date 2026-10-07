@@ -284,8 +284,7 @@ public class TransferService(IAppDbContext db) : ITransferService
         buyer.Budget -= offer.Amount;
 
         player.TeamId = buyer.Id;
-        player.IsStarter = false;
-        player.LineupSlot = 0;
+        player.LeaveLineup();
 
         var totalWeeks = await LeagueLengthAsync(season.Id, ct);
 
