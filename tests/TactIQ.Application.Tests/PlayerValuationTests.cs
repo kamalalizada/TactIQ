@@ -1,5 +1,6 @@
 using TactIQ.Application.Seeding;
 using TactIQ.Application.Transfers;
+using TactIQ.Domain.Entities;
 using TactIQ.Domain.Enums;
 
 namespace TactIQ.Application.Tests;
@@ -145,5 +146,46 @@ public class PlayerValuationTests
         var ceiling = PlayerValuation.HighestRatingUnder(2_000_000m);
 
         Assert.True(ceiling > 55, "A two-million budget could not afford anybody.");
+    }
+
+    [Fact]
+    public void AKnownMarketValueOutranksTheFormula()
+    {
+        // A teenager the whole of Europe wants is worth far more than his
+        // rating says, and the real figure is what a buyer has to meet.
+        var prospect = new Player { Overall = 74, Age = 18, Position = Position.MID, MarketValue = 90_000_000m };
+        var unknown = new Player { Overall = 74, Age = 18, Position = Position.MID };
+
+        Assert.Equal(90_000_000m, PlayerValuation.Of(prospect));
+        Assert.Equal(PlayerValuation.Of(74, 18, Position.MID), PlayerValuation.Of(unknown));
+    }
+
+    [Fact]
+    public void AMarketValueMovesWithTheRatingAndAgeAroundIt()
+    {
+        var value = 50_000_000m;
+
+        var improved = PlayerValuation.Revalue(value, 80, 22, 83, 23, Position.FWD);
+        var declined = PlayerValuation.Revalue(value, 84, 31, 82, 32, Position.FWD);
+
+        Assert.True(improved > value, $"An improving player fell to {improved}.");
+        Assert.True(declined < value, $"A declining veteran rose to {declined}.");
+    }
+
+    [Fact]
+    public void APlayerWithoutAMarketValueKeepsBeingPricedByTheFormula()
+    {
+        Assert.Equal(0m, PlayerValuation.Revalue(0m, 80, 22, 83, 23, Position.FWD));
+    }
+
+    [Fact]
+    public void SeededMarketValuesReachTheClubs()
+    {
+        var city = new TeamFactory(new Random(1)).CreateTeams(Guid.NewGuid(), 58)
+            .Single(team => team.Name == "Manchester City");
+
+        var haaland = city.Players.Single(p => p.Name == "Erling Haaland");
+
+        Assert.Equal(220_000_000m, PlayerValuation.Of(haaland));
     }
 }

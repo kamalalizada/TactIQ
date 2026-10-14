@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
+using TactIQ.Application.Transfers;
 
 namespace TactIQ.Application.Seeding;
 
@@ -19,7 +20,9 @@ public record SquadPlayer(
     int Passing,
     int Dribbling,
     int Defending,
-    int Physical);
+    int Physical,
+    /// <summary>The player's real market value in euros, where one is known.</summary>
+    decimal? MarketValue = null);
 
 public record Squad(
     string Name,
@@ -45,6 +48,25 @@ public static class SquadData
         All.Where(s => string.Equals(s.Country, country, StringComparison.OrdinalIgnoreCase))
            .OrderByDescending(s => s.Strength)
            .ToList();
+
+    /// <summary>
+    /// Whether a club has a squad the game would let it keep: at least an eleven
+    /// and a full set of changes, and no more than the market allows. A league's
+    /// clubs can be listed before their players are, and such a club cannot play
+    /// a match yet.
+    /// </summary>
+    public static bool IsPlayable(Squad squad) =>
+        squad.Players.Count is >= SquadLimits.MinimumSquad and <= SquadLimits.MaximumSquad;
+
+    /// <summary>Every club that can take the pitch.</summary>
+    public static IReadOnlyList<Squad> Playable => All.Where(IsPlayable).ToList();
+
+    /// <summary>Whether a league has clubs and every one of them is ready to play.</summary>
+    public static bool IsLeagueReady(string country)
+    {
+        var squads = ForCountry(country);
+        return squads.Count > 0 && squads.All(IsPlayable);
+    }
 
     public static IReadOnlyList<string> Countries =>
         All.Select(s => s.Country).Distinct().OrderBy(c => c).ToList();

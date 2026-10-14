@@ -8,6 +8,8 @@ public class TeamFactory(Random? random = null) : ITeamFactory
 {
     private readonly Random _random = random ?? Random.Shared;
 
+    public bool HasLeague(string country) => SquadData.IsLeagueReady(country);
+
     /// <summary>Every club of one domestic league, ready to be added to a season.</summary>
     public List<Team> CreateLeagueTeams(Guid seasonId, string country)
     {
@@ -16,12 +18,15 @@ public class TeamFactory(Random? random = null) : ITeamFactory
         if (squads.Count == 0)
             throw new ArgumentException($"No clubs are available for '{country}'.", nameof(country));
 
+        if (!squads.All(SquadData.IsPlayable))
+            throw new InvalidOperationException($"Not every club in '{country}' has a full squad yet.");
+
         return squads.Select(squad => CreateTeam(seasonId, squad)).ToList();
     }
 
     public List<Team> CreateTeams(Guid seasonId, int teamCount)
     {
-        var available = SquadData.All;
+        var available = SquadData.Playable;
 
         if (teamCount > available.Count)
             throw new ArgumentOutOfRangeException(nameof(teamCount), $"At most {available.Count} teams are supported.");
@@ -64,7 +69,8 @@ public class TeamFactory(Random? random = null) : ITeamFactory
                 Passing = p.Passing,
                 Dribbling = p.Dribbling,
                 Defending = p.Defending,
-                Physical = p.Physical
+                Physical = p.Physical,
+                MarketValue = p.MarketValue ?? 0m
             })
             .ToList();
 

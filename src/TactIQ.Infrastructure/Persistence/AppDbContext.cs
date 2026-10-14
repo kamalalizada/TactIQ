@@ -156,6 +156,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
         {
             e.Property(p => p.Name).IsRequired().HasMaxLength(120);
             e.Property(p => p.Nationality).HasMaxLength(60);
+            e.Property(p => p.MarketValue).HasPrecision(18, 2);
             e.HasIndex(p => p.TeamId);
             e.Ignore(p => p.IsAvailable);
         });

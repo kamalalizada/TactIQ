@@ -348,6 +348,10 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                     b.Property<int>("LineupSlot")
                         .HasColumnType("integer");
 
+                    b.Property<decimal>("MarketValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<int>("MatchesInjured")
                         .HasColumnType("integer");
 

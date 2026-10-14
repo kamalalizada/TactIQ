@@ -25,7 +25,9 @@ public class SeasonService(
     [
         ("England", "Premier League"),
         ("Spain", "LaLiga"),
-        ("Turkey", "Super Lig")
+        ("Turkey", "Super Lig"),
+        ("Italy", "Serie A"),
+        ("Germany", "Bundesliga")
     ];
 
     public async Task<SeasonSummaryDto> CreateAsync(string userId, CreateSeasonRequest request, CancellationToken ct = default)
@@ -41,6 +43,11 @@ public class SeasonService(
 
         foreach (var (country, name) in Leagues)
         {
+            // A league whose clubs are listed ahead of their players sits out
+            // until every squad is in.
+            if (!teamFactory.HasLeague(country))
+                continue;
+
             var teams = teamFactory.CreateLeagueTeams(season.Id, country);
             season.Teams.AddRange(teams);
 

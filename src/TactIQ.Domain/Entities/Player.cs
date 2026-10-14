@@ -58,6 +58,14 @@ public class Player
     /// from the six attributes — a striker's low defending must not drag it down.</summary>
     public int Overall { get; set; }
 
+    /// <summary>
+    /// What the market says the player is worth, in euros, when that is known.
+    /// Zero for anyone without a real figure — a youth graduate, or a save made
+    /// before values were recorded — whose price is then worked out from rating
+    /// and age instead; see <c>PlayerValuation</c>.
+    /// </summary>
+    public decimal MarketValue { get; set; }
+
     /// <summary>Condition carried between matches, 0-100. Drops while playing and
     /// recovers over the week, so a manager has to rotate a tired squad.</summary>
     public int Condition { get; set; } = 100;

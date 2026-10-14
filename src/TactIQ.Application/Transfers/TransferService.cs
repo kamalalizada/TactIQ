@@ -81,8 +81,12 @@ public class TransferService(IAppDbContext db) : ITransferService
 
         var scanned = query.MaxPrice is null ? take * 3 : Math.Max(take * 10, 400);
 
+        // A player with a real market value is priced by it, so the ceiling
+        // applies to him directly; only the rest need the rating estimate.
+        var maxPrice = query.MaxPrice ?? decimal.MaxValue;
+
         var found = await players
-            .Where(p => p.Overall <= reach)
+            .Where(p => p.MarketValue > 0 ? p.MarketValue <= maxPrice : p.Overall <= reach)
             .OrderByDescending(p => p.Overall)
             .Take(scanned)
             .ToListAsync(ct);

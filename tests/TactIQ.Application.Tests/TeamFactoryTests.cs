@@ -1,5 +1,6 @@
 using TactIQ.Application.Seeding;
 using TactIQ.Application.Simulation;
+using TactIQ.Application.Transfers;
 using TactIQ.Domain.Entities;
 using TactIQ.Domain.Enums;
 
@@ -22,13 +23,14 @@ public class TeamFactoryTests
     }
 
     [Fact]
-    public void EveryTeamHasFullSquadOfElevenStartersAndEightSubstitutes()
+    public void EveryTeamHasElevenStartersAndASquadTheMarketWouldAllow()
     {
-        Assert.All(Create(), team =>
+        // Real squads differ in size, so a seeded one only has to sit within the
+        // limits a club is held to once the window opens.
+        Assert.All(Create(58), team =>
         {
-            Assert.Equal(SquadRules.SquadSize, team.Players.Count);
+            Assert.InRange(team.Players.Count, SquadLimits.MinimumSquad, SquadLimits.MaximumSquad);
             Assert.Equal(SquadRules.StarterCount, team.Players.Count(p => p.IsStarter));
-            Assert.Equal(SquadRules.BenchCount, team.Players.Count(p => !p.IsStarter));
         });
     }
 
@@ -125,6 +127,15 @@ public class TeamFactoryTests
     public void RejectsMoreTeamsThanThereAreClubs()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => _factory.CreateTeams(Guid.NewGuid(), 99));
+    }
+
+    [Fact]
+    public void ALeagueListedAheadOfItsPlayersIsNotOfferedToASeason()
+    {
+        Assert.True(_factory.HasLeague("England"));
+        Assert.False(_factory.HasLeague("Italy"));
+        Assert.False(_factory.HasLeague("Germany"));
+        Assert.Throws<InvalidOperationException>(() => _factory.CreateLeagueTeams(Guid.NewGuid(), "Italy"));
     }
 
     [Fact]

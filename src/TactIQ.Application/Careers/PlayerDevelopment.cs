@@ -1,3 +1,4 @@
+using TactIQ.Application.Transfers;
 using TactIQ.Domain.Entities;
 
 namespace TactIQ.Application.Careers;
@@ -63,6 +64,8 @@ public static class PlayerDevelopment
 
         player.Overall = after;
         ScaleAttributes(player, before, after);
+        player.MarketValue = PlayerValuation.Revalue(
+            player.MarketValue, before, player.Age - 1, after, player.Age, player.Position);
 
         return new Change(before, after, Retired: false);
     }

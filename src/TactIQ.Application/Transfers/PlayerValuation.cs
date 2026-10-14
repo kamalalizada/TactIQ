@@ -32,8 +32,35 @@ public static class PlayerValuation
     /// <summary>Nobody is priced beyond this, however the numbers fall.</summary>
     private const decimal Ceiling = 200_000_000m;
 
+    /// <summary>
+    /// The player's real market value where one is known, and the formula's
+    /// figure where it is not. The real figure carries what a rating cannot —
+    /// a teenager the whole of Europe wants, or a fine player in his last
+    /// season — so it wins whenever it is there.
+    /// </summary>
     public static decimal Of(Player player) =>
-        Of(player.Overall, player.Age, player.Position);
+        player.MarketValue > 0
+            ? player.MarketValue
+            : Of(player.Overall, player.Age, player.Position);
+
+    /// <summary>
+    /// Carries a known market value through a change of rating or age, by the
+    /// same proportion the formula moves. A player who improves is worth more
+    /// than he was, a veteran a year older is worth less, and the gap between
+    /// his real figure and the formula's is kept rather than lost.
+    /// </summary>
+    public static decimal Revalue(decimal marketValue, int overallBefore, int ageBefore,
+        int overallAfter, int ageAfter, Position position)
+    {
+        if (marketValue <= 0)
+            return marketValue;
+
+        var before = Of(overallBefore, ageBefore, position);
+        var after = Of(overallAfter, ageAfter, position);
+        var moved = marketValue * after / before;
+
+        return Math.Max(Base, Math.Round(moved / 100_000m) * 100_000m);
+    }
 
     public static decimal Of(int overall, int age, Position position)
     {
