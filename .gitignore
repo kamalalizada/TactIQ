@@ -23,7 +23,7 @@ artifacts/
 *.snupkg
 
 ## Working notes — kept local; API.md and PLAN.md are the shared docs
-FRONTEND.md
+/FRONTEND.md
 DESIGN-PROMPT.md
 DESIGN-GAP.md
 
@@ -43,6 +43,12 @@ build/
 .vite/
 *.tsbuildinfo
 npm-debug.log*
+
+## The frontend keeps its own .env for the dev proxy; it holds no secrets,
+## but a production build takes its API address from the server it is served
+## from, so nothing here is environment-specific.
+frontend/.env.local
+frontend/.env.*.local
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*

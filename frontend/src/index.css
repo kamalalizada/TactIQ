@@ -1,0 +1,169 @@
+@import 'tailwindcss';
+
+@theme {
+  /* Football Manager palette: data first, decoration second. */
+  --color-bg: #0f1419;
+  --color-panel: #1a2027;
+  --color-line: #2a3441;
+
+  --color-ink: #e8edf2;
+  --color-muted: #8b9aab;
+
+  --color-win: #00d66f;
+  --color-draw: #ffb800;
+  --color-loss: #ff4757;
+  --color-accent: #3b82f6;
+  /* Kept under its old name; the highlight is a deeper blue than the accent. */
+  --color-violet: #2563eb;
+
+  /* Position colours, used on badges and player cards. */
+  --color-pos-gk: #ffb800;
+  --color-pos-def: #3b82f6;
+  --color-pos-mid: #00d66f;
+  --color-pos-fwd: #ff4757;
+
+  /* The narrow, heavy face a football game prints its team sheet in. */
+  --font-pitch: 'Barlow Condensed', 'Arial Narrow', ui-sans-serif, sans-serif;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-bg text-ink antialiased;
+    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    /* Keeps table columns from shifting as scores change. */
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Long lists show about ten rows and scroll the rest, so a card keeps its
+   height whether a league has 8 teams or 20. */
+@utility scroll-list {
+  @apply overflow-y-auto overscroll-contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) transparent;
+
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--color-line);
+    border-radius: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: var(--color-muted);
+  }
+}
+
+@utility card {
+  @apply rounded-lg border border-line bg-panel p-4;
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold
+         transition-colors disabled:cursor-not-allowed disabled:opacity-40;
+}
+
+@utility btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold
+         transition-colors disabled:cursor-not-allowed disabled:opacity-40
+         bg-accent text-white hover:bg-accent/85;
+}
+
+@utility btn-ghost {
+  @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold
+         transition-colors disabled:cursor-not-allowed disabled:opacity-40
+         border border-line text-ink hover:bg-white/5;
+}
+
+@utility btn-danger {
+  @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold
+         transition-colors disabled:cursor-not-allowed disabled:opacity-40
+         bg-loss text-white hover:bg-loss/85;
+}
+
+@utility field {
+  @apply w-full rounded-md border border-line bg-bg px-3 py-2 text-sm text-ink
+         outline-none placeholder:text-muted/60 focus:border-accent;
+}
+
+@utility label {
+  @apply mb-1.5 block text-xs font-medium tracking-wide text-muted uppercase;
+}
+
+/* The managed team is marked the same way on every screen. */
+@utility user-row {
+  @apply border-l-2 border-l-accent bg-accent/10;
+}
+
+@utility glass-card {
+  @apply rounded-xl border border-line/60 bg-panel/80 p-4 backdrop-blur-sm;
+}
+
+@utility gradient-btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3 text-sm font-bold tracking-wide uppercase transition-all;
+  background: linear-gradient(135deg, #3b82f6, #00d66f);
+  color: white;
+
+  &:hover:not(:disabled) {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+@utility stat-card {
+  @apply glass-card flex flex-col gap-1 transition-all duration-200;
+
+  &:hover {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.1);
+  }
+}
+
+@utility rank-badge {
+  @apply flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold;
+}
+
+@utility progress-gradient {
+  background: linear-gradient(90deg, #3b82f6, #00d66f);
+}
+
+@keyframes toast {
+  from {
+    opacity: 0;
+    transform: translateY(-0.75rem) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
