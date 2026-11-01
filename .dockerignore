@@ -1,0 +1,28 @@
+# Secrets never enter the build context.
+**/appsettings.Development.json
+**/appsettings.Local.json
+**/appsettings.*.Local.json
+**/.env
+**/.env.*
+!**/.env.example
+**/*.pfx
+**/*.p12
+
+# Build output and dependencies are rebuilt inside the image.
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+**/*.tsbuildinfo
+
+# Nothing the image needs.
+.git/
+.github/
+.vs/
+.vscode/
+.idea/
+tests/
+web/
+*.md
+docker-compose.yml
+test-season.ps1

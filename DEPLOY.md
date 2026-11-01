@@ -93,10 +93,14 @@ the cap of 50 is what bounds the harm.
 
 ### 3 — Dockerfile
 
-Multi-stage: Node builds the frontend, the .NET SDK builds the API and takes
-`frontend/dist` into `wwwroot`, and the runtime image carries only the output.
-It listens on port `10000`, Render's default.
-The free instance has 0.1 CPU and 512 MB, so it uses workstation GC.
+Done. Multi-stage: Node builds the frontend, the .NET SDK builds the API and takes
+`frontend/dist` into `wwwroot`, and the runtime image carries only the output, as
+a non-root user on port `10000`, Render's default, with workstation GC.
+
+Checked on an empty database under `--cpus=0.1 --memory=512m`: it boots and applies
+every migration in 16 s, and peaks at 163 MB. On that first boot the log shows two
+`fail` lines for `__EFMigrationsHistory`. They are harmless: EF looks for the table
+before creating it.
 
 ### 4 — Deploy (Kamal runs these)
 
@@ -104,6 +108,7 @@ The free instance has 0.1 CPU and 512 MB, so it uses workstation GC.
    connection details, not the pooled ones, because migrations run on boot.
 2. **Render:** New → Web Service → this GitHub repo. Language **Docker**, plan
    **Free**, health check path `/health`, same region if there is one.
+   The first build takes a few minutes.
 3. Set the environment variables on the service:
 
    ```
