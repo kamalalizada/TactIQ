@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 
 import { ErrorNote, Spinner } from '@/components/States'
 import { auth, ensureSignedIn } from '@/lib/auth'
@@ -23,8 +23,13 @@ const LiveMatchPage = lazy(() =>
   import('@/pages/LiveMatchPage').then((module) => ({ default: module.LiveMatchPage })),
 )
 
+/** Everything but the login page needs an account, even a guest's. */
+function RequireSignIn() {
+  return auth.token ? <Outlet /> : <Navigate to="/login" replace />
+}
+
 export default function App() {
-  const [ready, setReady] = useState(Boolean(auth.token))
+  const [ready, setReady] = useState(!import.meta.env.DEV || Boolean(auth.token))
   const [error, setError] = useState<unknown>(null)
 
   useEffect(() => {
@@ -46,43 +51,44 @@ export default function App() {
       <div className="mx-auto max-w-md px-4 py-20">
         <ErrorNote error={error} />
         <p className="mt-3 text-center text-xs text-muted">
-          Check that the API is running on http://localhost:5199.
+          API-nin http://localhost:5199 ünvanında işlədiyini yoxlayın.
         </p>
       </div>
     )
   }
 
-  if (!ready) return <Spinner label="Signing in…" />
+  if (!ready) return <Spinner label="Daxil olunur…" />
 
   return (
     <Routes>
-      <Route path="/" element={<LeaguesPage />} />
-      <Route path="/seasons/new" element={<NewLeaguePage />} />
-      <Route path="/seasons/:seasonId" element={<DashboardPage />} />
-      <Route path="/seasons/:seasonId/pick-team" element={<PickTeamPage />} />
-      <Route path="/seasons/:seasonId/table" element={<LeagueTablePage />} />
-      <Route path="/seasons/:seasonId/teams" element={<TeamsPage />} />
-      <Route path="/seasons/:seasonId/teams/:teamId" element={<TeamDetailPage />} />
-      <Route path="/seasons/:seasonId/squad" element={<SquadPage />} />
-      <Route path="/seasons/:seasonId/statistics" element={<StatisticsPage />} />
-      <Route path="/seasons/:seasonId/cup" element={<CupPage />} />
-      <Route path="/seasons/:seasonId/career" element={<CareerPage />} />
-      <Route path="/seasons/:seasonId/transfers" element={<TransferMarketPage />} />
-      <Route
-        path="/seasons/:seasonId/transfers/offers"
-        element={<TransferOffersPage />}
-      />
-      <Route
-        path="/matches/:matchId/live"
-        element={
-          <Suspense fallback={<Spinner label="Matç yüklənir…" />}>
-            <LiveMatchPage />
-          </Suspense>
-        }
-      />
-
-      {/* Kept reachable for when the login wall goes back up. */}
       <Route path="/login" element={<LoginPage />} />
+
+      <Route element={<RequireSignIn />}>
+        <Route path="/" element={<LeaguesPage />} />
+        <Route path="/seasons/new" element={<NewLeaguePage />} />
+        <Route path="/seasons/:seasonId" element={<DashboardPage />} />
+        <Route path="/seasons/:seasonId/pick-team" element={<PickTeamPage />} />
+        <Route path="/seasons/:seasonId/table" element={<LeagueTablePage />} />
+        <Route path="/seasons/:seasonId/teams" element={<TeamsPage />} />
+        <Route path="/seasons/:seasonId/teams/:teamId" element={<TeamDetailPage />} />
+        <Route path="/seasons/:seasonId/squad" element={<SquadPage />} />
+        <Route path="/seasons/:seasonId/statistics" element={<StatisticsPage />} />
+        <Route path="/seasons/:seasonId/cup" element={<CupPage />} />
+        <Route path="/seasons/:seasonId/career" element={<CareerPage />} />
+        <Route path="/seasons/:seasonId/transfers" element={<TransferMarketPage />} />
+        <Route
+          path="/seasons/:seasonId/transfers/offers"
+          element={<TransferOffersPage />}
+        />
+        <Route
+          path="/matches/:matchId/live"
+          element={
+            <Suspense fallback={<Spinner label="Matç yüklənir…" />}>
+              <LiveMatchPage />
+            </Suspense>
+          }
+        />
+      </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

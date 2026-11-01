@@ -14,6 +14,7 @@ public class LiveMatchService(
     IServiceScopeFactory scopeFactory,
     IMatchEngine matchEngine,
     IHubContext<MatchHub> hub,
+    IConfiguration configuration,
     ILogger<LiveMatchService> logger) : ILiveMatchService
 {
     private static readonly ConcurrentDictionary<Guid, LiveMatchSession> Sessions = new();
@@ -21,6 +22,11 @@ public class LiveMatchService(
 
     /// <summary>Real milliseconds per simulated minute at 1x speed.</summary>
     private const int BaseTickIntervalMs = 1000;
+
+    /// <summary>Every live match ticks in this one process, on a server with very little CPU.</summary>
+    private readonly int _maxConcurrent = configuration.GetValue("LiveMatches:MaxConcurrent", 3);
+
+    private static readonly Lock StartGate = new();
 
     public async Task<LiveStateDto> StartAsync(string userId, Guid matchId, StartLiveRequest request, CancellationToken ct = default)
     {
@@ -49,8 +55,20 @@ public class LiveMatchService(
         var session = new LiveMatchSession(
             match, userTeamId, request.Style, request.Formation, request.SpeedMultiplier, matchEngine);
 
-        if (!Sessions.TryAdd(matchId, session))
-            return Sessions[matchId].Snapshot();
+        lock (StartGate)
+        {
+            if (Sessions.TryGetValue(matchId, out var started))
+                return started.Snapshot();
+
+            if (Sessions.Count >= _maxConcurrent)
+            {
+                throw new InvalidOperationException(
+                    "Server hazırda doludur: eyni anda yalnız " + _maxConcurrent +
+                    " canlı matç oynana bilər. Bir az sonra yenidən cəhd edin, ya da həftəni simulyasiya edin.");
+            }
+
+            Sessions[matchId] = session;
+        }
 
         StartLoop(session);
         return session.Snapshot();
@@ -144,6 +162,9 @@ public class LiveMatchService(
 
                     if (session.Status == LiveMatchStatus.Finished)
                         break;
+
+                    if (session.IsAbandoned(DateTime.UtcNow))
+                        return;
 
                     if (session.Status == LiveMatchStatus.Paused)
                         continue;

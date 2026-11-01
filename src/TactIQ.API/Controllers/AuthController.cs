@@ -1,12 +1,22 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using TactIQ.Infrastructure.Identity;
 
 namespace TactIQ.API.Controllers;
 
 [ApiController]
 [Route("api/auth")]
-public class AuthController(IAuthService authService) : ControllerBase
+public class AuthController(IAuthService authService, IGuestService guests) : ControllerBase
 {
+    /// <summary>The rate limit that keeps one visitor from opening guest after guest.</summary>
+    public const string GuestRateLimit = "guest";
+
+    /// <summary>Opens a throwaway account, so a visitor can play without registering.</summary>
+    [HttpPost("guest")]
+    [EnableRateLimiting(GuestRateLimit)]
+    public async Task<ActionResult<AuthResponse>> Guest(CancellationToken ct) =>
+        Ok(await guests.CreateAsync(ct));
+
     [HttpPost("register")]
     public async Task<ActionResult<AuthResponse>> Register(RegisterRequest request)
     {

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TactIQ.Application.Seasons;
 using TactIQ.Application.Statistics;
+using TactIQ.Infrastructure.Identity;
 
 namespace TactIQ.API.Controllers;
 
@@ -18,6 +19,14 @@ public class SeasonsController(ISeasonService seasons) : ControllerBase
     [HttpPost]
     public async Task<ActionResult<SeasonSummaryDto>> Create(CreateSeasonRequest request, CancellationToken ct)
     {
+        // One career each: every save copies all the clubs and players, and the
+        // free database has to hold every guest's.
+        if (User.HasClaim(AuthService.GuestClaim, "true") && (await seasons.ListAsync(UserId, ct)).Count > 0)
+        {
+            throw new InvalidOperationException(
+                "Qonaq hesabında yalnız bir karyera ola bilər.");
+        }
+
         var season = await seasons.CreateAsync(UserId, request, ct);
         return CreatedAtAction(nameof(Get), new { seasonId = season.Id }, season);
     }

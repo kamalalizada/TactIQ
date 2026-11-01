@@ -1,16 +1,18 @@
 # Deploy
 
-TactIQ goes online at **tactiq.fly.dev** so the project can be linked from a CV.
-Free tier throughout: no server bill, no domain bill.
+TactIQ goes online on **Render** so the project can be linked from a CV, with
+the database on **Neon**. Free tier throughout: no server bill, no domain bill.
+The address is `https://<service name>.onrender.com`.
 
 ## Decisions already made
 
-These were settled on 2026-11-01. They are not open questions.
+These were settled on 2026-11-01. They replace an earlier Fly.io plan: Fly.io no
+longer has a free tier for new organizations.
 
 | | |
 |---|---|
-| Platform | **Fly.io**, region `fra` (Frankfurt) |
-| Why not Render | its free backend sleeps; a 30-second wait kills a demo |
+| Server | **Render** free web service, built from the Dockerfile |
+| Database | **Neon** free Postgres: Render's free Postgres is deleted after 30 days plus a 14-day grace period, Neon's has no expiry |
 | Access | **guest accounts** — one career each, no registration |
 | Seed | league structure and clubs only, **no played matches** |
 | Guest cleanup | untouched guests deleted after **7 days** |
@@ -24,64 +26,120 @@ already exists, so this needs no schema change.
 No pre-played matches: every guest starts at week zero and plays their own
 season, so there is nothing to pre-play.
 
+## What the free tier costs us
+
+Checked against Render's and Neon's documentation on 2026-11-01.
+
+**Render**
+
+- Sleeps after 15 minutes without inbound traffic; waking takes about a minute.
+- 750 instance hours a month, enough for one service all month (744 at most).
+  Used up, the service is suspended until the next month.
+- Past the monthly bandwidth allowance, an account with no payment method has
+  its free services suspended for the month rather than being billed. Past the
+  build-minute allowance, new builds stop and the service keeps running.
+- May restart at any time. The disk is not kept, and a live match in progress
+  is lost, because live sessions are held in memory.
+
+**Neon**
+
+- 1 GB per project; past that, writes are blocked. Every career copies all clubs
+  and players, so guest cleanup is what keeps this from filling up.
+- 100 CU-hours a month. Sleeps after 5 minutes and wakes in a few hundred
+  milliseconds.
+
 ## Work
 
 Claude's, unless marked otherwise.
 
 ### 1 — Production configuration
 
+Done:
+
 - Secrets from environment variables (`Jwt__Key`, `ConnectionStrings__Default`).
-  `Program.cs` currently dies pointing at `appsettings.Development.json`, which
-  is gitignored and never reaches a server.
-- CORS off in production: one origin, so it is not needed.
-- `UseHttpsRedirection` off: Fly terminates TLS at the edge and forwards HTTP,
-  so the redirect would loop.
-- Serve the built frontend: `/api` and `/hubs` to controllers, everything else
-  to `index.html` for React Router.
+- CORS and `UseHttpsRedirection` in development only: one origin, and the host
+  terminates TLS, so the redirect would loop.
+- Swagger open in every environment.
+- Serve the built frontend: `/api` and `/hubs` to the API, a wrong API path is a
+  404, everything else goes to `index.html` for React Router.
+- `GET /health`, which does not touch the database.
 
 ### 2 — Guest accounts
 
-- `POST /api/auth/guest` — creates a throwaway user, returns a JWT.
-- A "Qonaq kimi oyna" button on the login page, with a note that the save is
-  kept for 7 days.
-- A background service that deletes guests untouched for 7 days, with their
-  leagues, clubs, players and matches. Registered users are left alone.
+Done:
+
+- `POST /api/auth/guest` creates a throwaway user and returns a JWT. The token
+  lasts 90 days, but a guest whose account is gone gets a 401 regardless.
+- A "Qonaq kimi oyna" button on the login page, which is now what a visitor
+  lands on. The automatic demo sign-in exists only in development, and its
+  password is not in the production bundle.
+- A background service deletes guests untouched for 7 days, with everything they
+  own, on boot and then hourly. Registered users are left alone.
+
+The limits, all under `Guests` and `LiveMatches` in `appsettings.json`:
+
+| Limit | Value | When reached |
+|---|---|---|
+| Careers per guest | 1 | A second one is refused |
+| Guests in total | 50 | The guest away longest is deleted to make room |
+| New guests per address | 5 an hour | Refused with a 429 |
+| Live matches at once | 3 | Refused; simulating the week still works |
+
+A live match paused for 10 minutes is closed, so abandoned ones free their slot.
+
+The address is the first one in `X-Forwarded-For`. Render does not document this
+header's contents, so it is unconfirmed until step 5, and a client can forge it;
+the cap of 50 is what bounds the harm.
 
 ### 3 — Dockerfile
 
 Multi-stage: Node builds the frontend, the .NET SDK builds the API and takes
 `frontend/dist` into `wwwroot`, and the runtime image carries only the output.
+It listens on port `10000`, Render's default.
+The free instance has 0.1 CPU and 512 MB, so it uses workstation GC.
 
 ### 4 — Deploy (Kamal runs these)
 
-```sh
-iwr https://fly.io/install.ps1 -useb | iex     # PowerShell
-fly auth signup                                 # card required, not charged
+1. **Neon:** create a project in a region near Render's, and copy the **direct**
+   connection details, not the pooled ones, because migrations run on boot.
+2. **Render:** New → Web Service → this GitHub repo. Language **Docker**, plan
+   **Free**, health check path `/health`, same region if there is one.
+3. Set the environment variables on the service:
 
-fly postgres create --name tactiq-db --region fra
-fly launch --name tactiq --region fra --no-deploy
-
-fly secrets set Jwt__Key="<32+ characters>"
-fly secrets attach tactiq-db
-
-fly deploy
-```
+   ```
+   Jwt__Key=<32+ random characters>
+   ConnectionStrings__Default=Host=<host>;Database=<db>;Username=<user>;Password=<password>;SSL Mode=Require
+   ```
 
 Migrations run themselves: `Program.cs` calls `MigrateDatabaseAsync()` on boot.
+Do not add a payment method unless Render insists: without one, going over a
+limit suspends the service instead of billing for it. Render's pages do not say
+whether signing up asks for one.
 
 ### 5 — Check and publish
 
 - Open the link in a **private window**, play through as a guest.
+- Press "Qonaq kimi oyna" in six fresh private windows on one network: the
+  sixth must be refused. If a visitor on **another** network is refused too, every
+  request looks like one address, and `GuestRules.ClientKey` needs another header.
 - Open a second guest in another browser, pick a different club, confirm the two
   careers do not touch.
 - Try it on a phone.
 - Write the README: live link, screenshots, stack, local setup.
 
-## If Fly.io falls through
+## Keeping it awake (optional)
 
-The Dockerfile and the configuration work are platform-neutral. Railway
-(~$5/month) and Oracle Cloud Always Free (free, but a bare VM: Docker, Nginx and
-TLS are yours to set up) both take the same image.
+An uptime monitor calling `/health` every 10 minutes counts as inbound traffic,
+so the service should not sleep and a visitor should not wait a minute. It must
+be `/health`: Render answers `/robots.txt` itself without waking the service.
+Render's documentation neither allows nor forbids this. Without it, the first
+visitor after a quiet spell simply waits.
+
+## If Render falls through
+
+The Dockerfile and the configuration work are platform-neutral. Oracle Cloud
+Always Free does not sleep, but it is a bare VM: Docker, Nginx, TLS and Postgres
+are yours to set up, and Oracle may reclaim an idle instance.
 
 ## What not to do
 

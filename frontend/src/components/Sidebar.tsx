@@ -87,12 +87,25 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <div className="border-t border-line px-3 py-4">
         <div className="flex items-center gap-3 px-2">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-violet/20 text-xs font-bold text-violet">
-            {(auth.email ?? '?').charAt(0).toUpperCase()}
+            {(auth.email ?? 'Qonaq').charAt(0).toUpperCase()}
           </span>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-medium">Menecer</p>
             <p className="truncate text-[0.7rem] text-muted">{auth.email ?? 'Qonaq'}</p>
           </div>
+          {/* A guest has no password, so signing out would lose the save for good. */}
+          {auth.email && (
+            <button
+              type="button"
+              onClick={() => {
+                auth.clear()
+                window.location.assign('/login')
+              }}
+              className="shrink-0 text-[0.7rem] text-muted underline hover:text-ink"
+            >
+              Çıxış
+            </button>
+          )}
         </div>
       </div>
     </div>

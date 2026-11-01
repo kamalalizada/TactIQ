@@ -61,6 +61,9 @@ public class LiveMatchSession
     public string UserFormation { get; private set; }
     public int SubstitutionsUsed { get; private set; }
 
+    private static readonly TimeSpan AbandonedAfter = TimeSpan.FromMinutes(10);
+    private DateTime _pausedAt;
+
     public int SpeedMultiplier { get; private set; }
 
     public bool UserIsHome => HomeTeam.Id == UserTeamId;
@@ -206,7 +209,10 @@ public class LiveMatchSession
         lock (_gate)
         {
             if (Status == LiveMatchStatus.Running)
+            {
                 Status = LiveMatchStatus.Paused;
+                _pausedAt = DateTime.UtcNow;
+            }
         }
     }
 
@@ -217,6 +223,16 @@ public class LiveMatchSession
             if (Status == LiveMatchStatus.Paused)
                 Status = LiveMatchStatus.Running;
         }
+    }
+
+    /// <summary>
+    /// A running match ends by itself, but a paused one would wait for ever,
+    /// holding one of the few live slots after its manager has left.
+    /// </summary>
+    public bool IsAbandoned(DateTime now)
+    {
+        lock (_gate)
+            return Status == LiveMatchStatus.Paused && now - _pausedAt >= AbandonedAfter;
     }
 
     public LiveStateDto Snapshot()

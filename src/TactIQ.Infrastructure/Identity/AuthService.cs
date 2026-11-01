@@ -11,13 +11,19 @@ public interface IAuthService
 {
     Task<AuthResult> RegisterAsync(RegisterRequest request);
     Task<AuthResult> LoginAsync(LoginRequest request);
+    AuthResponse CreateGuestToken(ApplicationUser user);
 }
 
 public class AuthService(
     UserManager<ApplicationUser> userManager,
-    IOptions<JwtOptions> jwtOptions) : IAuthService
+    IOptions<JwtOptions> jwtOptions,
+    IOptions<GuestOptions> guestOptions) : IAuthService
 {
+    /// <summary>Marks a token as a guest's, so a request knows to check the account still exists.</summary>
+    public const string GuestClaim = "guest";
+
     private readonly JwtOptions _jwt = jwtOptions.Value;
+    private readonly GuestOptions _guests = guestOptions.Value;
 
     public async Task<AuthResult> RegisterAsync(RegisterRequest request)
     {
@@ -26,7 +32,7 @@ public class AuthService(
 
         return result.Succeeded
             ? AuthResult.Success(CreateToken(user))
-            : AuthResult.Failure(result.Errors.Select(e => e.Description).ToArray());
+            : AuthResult.Failure(result.Errors.Select(Describe).Distinct().ToArray());
     }
 
     public async Task<AuthResult> LoginAsync(LoginRequest request)
@@ -35,19 +41,37 @@ public class AuthService(
 
         return user is not null && await userManager.CheckPasswordAsync(user, request.Password)
             ? AuthResult.Success(CreateToken(user))
-            : AuthResult.Failure("Invalid email or password.");
+            : AuthResult.Failure("E-poçt və ya parol səhvdir.");
     }
 
-    private AuthResponse CreateToken(ApplicationUser user)
-    {
-        var expiresAt = DateTime.UtcNow.AddHours(_jwt.ExpiryHours);
+    /// <summary>
+    /// A guest has no password to log back in with, so the token has to outlive
+    /// the save. It can run long because it is not the last word: a request from
+    /// a guest whose account has been deleted is refused regardless.
+    /// </summary>
+    public AuthResponse CreateGuestToken(ApplicationUser user) =>
+        CreateToken(user, DateTime.UtcNow.AddDays(_guests.TokenDays), new Claim(GuestClaim, "true"));
 
-        var claims = new[]
-        {
+    private AuthResponse CreateToken(ApplicationUser user) =>
+        CreateToken(user, DateTime.UtcNow.AddHours(_jwt.ExpiryHours));
+
+    private static string Describe(IdentityError error) => error.Code switch
+    {
+        "DuplicateEmail" or "DuplicateUserName" => "Bu e-poçt artıq qeydiyyatdan keçib.",
+        "InvalidEmail" or "InvalidUserName" => "E-poçt ünvanı düzgün deyil.",
+        "PasswordTooShort" => "Parol ən azı 6 simvol olmalıdır.",
+        _ => error.Description
+    };
+
+    private AuthResponse CreateToken(ApplicationUser user, DateTime expiresAt, params Claim[] extra)
+    {
+        Claim[] claims =
+        [
             new Claim(JwtRegisteredClaimNames.Sub, user.Id),
             new Claim(JwtRegisteredClaimNames.Email, user.Email!),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
-        };
+            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            .. extra
+        ];
 
         var credentials = new SigningCredentials(
             new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwt.Key)),

@@ -35,6 +35,22 @@ public class LiveMatchSessionTests
     }
 
     [Fact]
+    public void APausedMatchIsAbandonedOnlyAfterItsManagerHasStayedAway()
+    {
+        var session = CreateSession(out _, out _);
+        var later = DateTime.UtcNow.AddMinutes(11);
+
+        Assert.False(session.IsAbandoned(later));
+
+        session.Pause();
+        Assert.False(session.IsAbandoned(DateTime.UtcNow));
+        Assert.True(session.IsAbandoned(later));
+
+        session.Resume();
+        Assert.False(session.IsAbandoned(later));
+    }
+
+    [Fact]
     public void StartsAtMinuteZeroAndRunning()
     {
         var session = CreateSession(out _, out _);

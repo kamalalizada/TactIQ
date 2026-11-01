@@ -11,8 +11,8 @@ import { auth } from '@/lib/auth'
 
 // Mirrors the backend rule: six characters, nothing else required.
 const schema = z.object({
-  email: z.string().min(1, 'Email is required').email('Enter a valid email'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  email: z.string().min(1, 'E-poçt ünvanını yazın').email('E-poçt ünvanı düzgün deyil'),
+  password: z.string().min(6, 'Parol ən azı 6 simvol olmalıdır'),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -39,6 +39,14 @@ export function LoginPage() {
     },
   })
 
+  const guest = useMutation({
+    mutationFn: () => authApi.guest(),
+    onSuccess: (result) => {
+      auth.saveGuest(result.token)
+      navigate('/', { replace: true })
+    },
+  })
+
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       {/* Brand panel: a dark pitch gradient rather than a stock photo. */}
@@ -59,9 +67,9 @@ export function LoginPage() {
           <h1 className="text-5xl font-black tracking-tight">
             Tact<span className="text-win">IQ</span>
           </h1>
-          <p className="mt-3 text-lg font-semibold text-muted">Manage. Simulate. Win.</p>
+          <p className="mt-3 text-lg font-semibold text-muted">İdarə et. Simulyasiya et. Qazan.</p>
           <p className="mt-6 max-w-sm text-sm leading-relaxed text-muted">
-            Football management simulation with real teams, real players and real emotions.
+            Real komandalar və real oyunçularla futbol menecerliyi simulyasiyası.
           </p>
         </div>
       </aside>
@@ -72,7 +80,26 @@ export function LoginPage() {
             <h1 className="text-3xl font-black tracking-tight">
               Tact<span className="text-win">IQ</span>
             </h1>
-            <p className="mt-1 text-sm text-muted">Manage. Simulate. Win.</p>
+            <p className="mt-1 text-sm text-muted">İdarə et. Simulyasiya et. Qazan.</p>
+          </div>
+
+          <div className="mb-4 rounded-lg border border-line bg-panel p-6">
+            <button
+              type="button"
+              className="btn-primary w-full"
+              onClick={() => guest.mutate()}
+              disabled={guest.isPending}
+            >
+              {guest.isPending ? 'Hazırlanır…' : 'Qonaq kimi oyna'}
+            </button>
+            <p className="mt-2.5 text-center text-xs text-muted">
+              Qeydiyyat lazım deyil. Son girişindən 7 gün sonra karyeran silinir.
+            </p>
+            {guest.isError && (
+              <div className="mt-3">
+                <ErrorNote error={guest.error} />
+              </div>
+            )}
           </div>
 
           <form
@@ -96,7 +123,7 @@ export function LoginPage() {
                       : 'border-transparent text-muted hover:text-ink'
                   }`}
                 >
-                  {value === 'login' ? 'Login' : 'Register'}
+                  {value === 'login' ? 'Daxil ol' : 'Qeydiyyat'}
                 </button>
               ))}
             </div>
@@ -104,14 +131,14 @@ export function LoginPage() {
             <div className="space-y-4">
               <div>
                 <label className="mb-1.5 block text-xs text-muted" htmlFor="email">
-                  Email address
+                  E-poçt ünvanı
                 </label>
                 <input
                   id="email"
                   type="email"
                   autoComplete="email"
                   className="field"
-                  placeholder="you@example.com"
+                  placeholder="sen@example.com"
                   aria-invalid={Boolean(form.formState.errors.email)}
                   {...form.register('email')}
                 />
@@ -120,7 +147,7 @@ export function LoginPage() {
 
               <div>
                 <label className="mb-1.5 block text-xs text-muted" htmlFor="password">
-                  Password
+                  Parol
                 </label>
                 <div className="relative">
                   <input
@@ -135,7 +162,7 @@ export function LoginPage() {
                   <button
                     type="button"
                     onClick={() => setShowPassword((shown) => !shown)}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-label={showPassword ? 'Parolu gizlət' : 'Parolu göstər'}
                     className="absolute inset-y-0 right-0 px-3 text-muted transition-colors hover:text-ink"
                   >
                     {showPassword ? '◡' : '◉'}
@@ -147,12 +174,12 @@ export function LoginPage() {
               {submit.isError && <ErrorNote error={submit.error} />}
 
               <button type="submit" className="btn-primary w-full" disabled={submit.isPending}>
-                {submit.isPending ? 'Please wait…' : 'Continue'}
+                {submit.isPending ? 'Gözləyin…' : 'Davam et'}
               </button>
             </div>
 
             <p className="mt-5 text-center text-xs text-muted">
-              {mode === 'login' ? "Don't have an account? " : 'Already registered? '}
+              {mode === 'login' ? 'Hesabın yoxdur? ' : 'Artıq qeydiyyatdan keçmisən? '}
               <button
                 type="button"
                 className="font-medium text-accent hover:underline"
@@ -161,7 +188,7 @@ export function LoginPage() {
                   submit.reset()
                 }}
               >
-                {mode === 'login' ? 'Register' : 'Login'}
+                {mode === 'login' ? 'Qeydiyyatdan keç' : 'Daxil ol'}
               </button>
             </p>
           </form>

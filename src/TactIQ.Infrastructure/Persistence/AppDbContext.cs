@@ -25,6 +25,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
     {
         base.OnModelCreating(builder);
 
+        // The cleanup sweep and the cap both look guests up by when they were last seen.
+        builder.Entity<ApplicationUser>(e => e.HasIndex(u => new { u.IsGuest, u.LastActiveAt }));
+
         builder.Entity<Season>(e =>
         {
             e.Property(s => s.UserId).IsRequired().HasMaxLength(450);

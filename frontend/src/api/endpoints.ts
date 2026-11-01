@@ -31,6 +31,8 @@ export const authApi = {
     api.post<AuthResponse>('/auth/register', { email, password }),
   login: (email: string, password: string) =>
     api.post<AuthResponse>('/auth/login', { email, password }),
+  /** Opens a throwaway account, so a visitor can play without registering. */
+  guest: () => api.post<AuthResponse>('/auth/guest'),
 }
 
 /** A season owns the squads and holds one or more competitions. */

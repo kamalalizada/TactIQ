@@ -15,7 +15,7 @@ src/TactIQ.Domain/         entities and enums
 src/TactIQ.Application/    game logic: match engine, transfers, seasons, careers
 src/TactIQ.Infrastructure/ EF Core, PostgreSQL, Identity, migrations
 src/TactIQ.API/            controllers, SignalR hubs, JWT
-tests/                     257 tests, all passing
+tests/                     267 tests, all passing
 frontend/                  React 19 + TypeScript + Vite
 ```
 

@@ -39,6 +39,7 @@ const STATUS_MESSAGES: Record<number, string> = {
   403: 'Bu əməliyyata icazəniz yoxdur.',
   404: 'Axtardığınız məlumat tapılmadı.',
   409: 'Bu əməliyyat indi mümkün deyil.',
+  429: 'Çox sayda sorğu göndərildi. Bir az sonra yenidən cəhd edin.',
   500: 'Serverdə xəta baş verdi.',
 }
 

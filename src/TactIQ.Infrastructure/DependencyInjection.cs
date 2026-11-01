@@ -40,6 +40,10 @@ public static class DependencyInjection
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
         services.AddScoped<IAuthService, AuthService>();
 
+        services.Configure<GuestOptions>(configuration.GetSection(GuestOptions.SectionName));
+        services.AddSingleton<GuestActivity>();
+        services.AddScoped<IGuestService, GuestService>();
+
         services.AddSingleton<IScheduleGenerator, RoundRobinScheduleGenerator>();
         services.AddSingleton<IStandingsCalculator, StandingsCalculator>();
         services.AddSingleton<IStatisticsCalculator, StatisticsCalculator>();
