@@ -29,6 +29,39 @@ public class Player
     public int Defending { get; set; }
     public int Physical { get; set; }
 
+    // Goalkeeping. An outfield player's six attributes say nothing useful about
+    // a keeper — a shot-stopper is not "good at defending" in the sense a
+    // centre-back is — so the job has its own, and they are left at zero for
+    // everybody else.
+
+    /// <summary>Coming for crosses and closing down a one-on-one.</summary>
+    public int Diving { get; set; }
+
+    /// <summary>Holding the ball rather than spilling it.</summary>
+    public int Handling { get; set; }
+
+    /// <summary>Distribution, from a goal kick to a throw that starts a break.</summary>
+    public int Kicking { get; set; }
+
+    /// <summary>The save itself: how much of a shot a keeper gets to.</summary>
+    public int Reflexes { get; set; }
+
+    /// <summary>How far off his line he can afford to play.</summary>
+    public int Speed { get; set; }
+
+    /// <summary>Reading the shot and being where it is going.</summary>
+    public int Positioning { get; set; }
+
+    /// <summary>
+    /// How well this player keeps goal, as the match engine reads it. Reflexes
+    /// and positioning win most saves; handling decides whether the ball stays
+    /// caught. An outfield player in goal falls back on what little his own
+    /// attributes offer.
+    /// </summary>
+    public int Goalkeeping => Reflexes > 0
+        ? (int)Math.Round(Reflexes * 0.4 + Positioning * 0.3 + Handling * 0.2 + Diving * 0.1)
+        : (int)Math.Round(Defending * 0.5 + Physical * 0.3 + Pace * 0.2);
+
     public bool IsStarter { get; set; }
 
     /// <summary>

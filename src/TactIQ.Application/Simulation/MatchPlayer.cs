@@ -53,6 +53,12 @@ public class MatchPlayer(Player player)
     public int Dribbling => Degraded(_source.Dribbling);
     public int Defending => Degraded(_source.Defending);
     public int Physical => Degraded(_source.Physical);
+
+    /// <summary>
+    /// How well he keeps goal tonight. A keeper tires like anybody else, and a
+    /// tired one gets to fewer shots.
+    /// </summary>
+    public int Goalkeeping => Degraded(_source.Goalkeeping);
     /// <summary>Their rating in the role they are playing, not in the abstract.</summary>
     public int Overall => Math.Max(1, (int)Math.Round(_source.Overall * RoleFit));
 

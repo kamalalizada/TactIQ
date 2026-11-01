@@ -70,6 +70,12 @@ public class TeamFactory(Random? random = null) : ITeamFactory
                 Dribbling = p.Dribbling,
                 Defending = p.Defending,
                 Physical = p.Physical,
+                Diving = p.Diving,
+                Handling = p.Handling,
+                Kicking = p.Kicking,
+                Reflexes = p.Reflexes,
+                Speed = p.Speed,
+                Positioning = p.Positioning,
                 MarketValue = p.MarketValue ?? 0m
             })
             .ToList();

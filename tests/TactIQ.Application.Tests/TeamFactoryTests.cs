@@ -13,6 +13,12 @@ public class TeamFactoryTests
 
     private List<Team> Create(int count = 8) => _factory.CreateTeams(Guid.NewGuid(), count);
 
+    /// <summary>
+    /// Every club the seed can actually field. Promotion and relegation change
+    /// which they are, so the number is read rather than written down.
+    /// </summary>
+    private List<Team> CreateEveryClub() => Create(SquadData.Playable.Count);
+
     [Fact]
     public void CreatesRequestedNumberOfTeamsWithDistinctNames()
     {
@@ -27,7 +33,7 @@ public class TeamFactoryTests
     {
         // Real squads differ in size, so a seeded one only has to sit within the
         // limits a club is held to once the window opens.
-        Assert.All(Create(58), team =>
+        Assert.All(CreateEveryClub(), team =>
         {
             Assert.InRange(team.Players.Count, SquadLimits.MinimumSquad, SquadLimits.MaximumSquad);
             Assert.Equal(SquadRules.StarterCount, team.Players.Count(p => p.IsStarter));
@@ -53,7 +59,7 @@ public class TeamFactoryTests
     [Fact]
     public void BenchCoversEveryPositionSoAnySubstitutionIsPossible()
     {
-        Assert.All(Create(58), team =>
+        Assert.All(CreateEveryClub(), team =>
         {
             var bench = team.Players.Where(p => !p.IsStarter).ToList();
 
@@ -167,7 +173,7 @@ public class TeamFactoryTests
         // A seeded side may field a winger wide in midfield, or a holder in the
         // centre — those are neighbouring jobs and cost almost nothing. What it
         // must never do is stand a defender up front or a striker at the back.
-        Assert.All(Create(58), team =>
+        Assert.All(CreateEveryClub(), team =>
         {
             foreach (var player in team.Players.Where(p => p.IsStarter))
             {
@@ -184,7 +190,7 @@ public class TeamFactoryTests
     [Fact]
     public void EverySeededClubFieldsARealBackLine()
     {
-        Assert.All(Create(58), team =>
+        Assert.All(CreateEveryClub(), team =>
         {
             var shape = FormationShape.Of(team.Formation);
 
@@ -201,6 +207,28 @@ public class TeamFactoryTests
 
             Assert.All(back, player =>
                 Assert.Equal(shape[player.LineupSlot - 1], player.Role));
+        });
+    }
+
+    [Fact]
+    public void NoSeededStarterIsRatedDownForTheShirtHeWears()
+    {
+        // A squad list calls a player what his club calls him, but a manager
+        // who fields a winger at left-midfield is not asking him to do another
+        // job badly — he is playing left-midfield. Every seeded starter is
+        // therefore the role of the slot he stands in, and nobody loses a
+        // rating point to the team sheet he was given.
+        Assert.All(CreateEveryClub(), team =>
+        {
+            var shape = FormationShape.Of(team.Formation);
+
+            foreach (var player in team.Players.Where(p => p.IsStarter))
+            {
+                var job = shape[player.LineupSlot - 1];
+
+                Assert.Equal(job, player.Role);
+                Assert.Equal(RoleFitness.Native, RoleFitness.For(player.Role, job));
+            }
         });
     }
 }

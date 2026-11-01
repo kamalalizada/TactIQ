@@ -1,4 +1,4 @@
-using TactIQ.Application.Seeding;
+﻿using TactIQ.Application.Seeding;
 using TactIQ.Domain.Entities;
 using TactIQ.Domain.Enums;
 
@@ -21,8 +21,12 @@ public static class SquadLimits
     /// </summary>
     public const int MinimumSquad = SquadRules.StarterCount + SquadRules.MaxSubstitutions;
 
-    /// <summary>Beyond this a squad is unmanageable, and the wage bill fiction breaks.</summary>
-    public const int MaximumSquad = 25;
+    /// <summary>
+    /// Beyond this a squad is unmanageable, and the wage bill fiction breaks.
+    /// Wide enough for a real first team with its reserve keepers and academy
+    /// players behind it, rather than the bare matchday twenty-five.
+    /// </summary>
+    public const int MaximumSquad = 32;
 
     /// <summary>
     /// The fewest a club may keep in each line: enough to fill the widest shape

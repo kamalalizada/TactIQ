@@ -1,4 +1,4 @@
-using TactIQ.Domain.Enums;
+﻿using TactIQ.Domain.Enums;
 
 namespace TactIQ.Application.Simulation;
 
@@ -44,9 +44,9 @@ public static class RoleFitness
     private static readonly Dictionary<PlayerRole, PlayerRole[]> Neighbours = new()
     {
         [PlayerRole.GK] = [],
-        [PlayerRole.LB] = [PlayerRole.RB, PlayerRole.LM],
+        [PlayerRole.LB] = [PlayerRole.RB, PlayerRole.LM, PlayerRole.LWB],
         [PlayerRole.CB] = [PlayerRole.CDM],
-        [PlayerRole.RB] = [PlayerRole.LB, PlayerRole.RM],
+        [PlayerRole.RB] = [PlayerRole.LB, PlayerRole.RM, PlayerRole.RWB],
         [PlayerRole.CDM] = [PlayerRole.CM, PlayerRole.CB],
         [PlayerRole.CM] = [PlayerRole.CDM, PlayerRole.CAM],
         [PlayerRole.CAM] = [PlayerRole.CM, PlayerRole.ST],
@@ -55,13 +55,20 @@ public static class RoleFitness
         [PlayerRole.LW] = [PlayerRole.LM, PlayerRole.RW],
         [PlayerRole.RW] = [PlayerRole.RM, PlayerRole.LW],
         [PlayerRole.ST] = [PlayerRole.CAM],
+
+        // A wing-back is the full-back of his flank asked to get forward, and
+        // the wide midfielder of his flank asked to defend. Both are a step
+        // away; the opposite flank is handled by FlankOf below.
+        [PlayerRole.LWB] = [PlayerRole.LB, PlayerRole.LM],
+        [PlayerRole.RWB] = [PlayerRole.RB, PlayerRole.RM],
     };
 
     /// <summary>The line of the pitch a role belongs to.</summary>
     public static Position LineOf(PlayerRole role) => role switch
     {
         PlayerRole.GK => Position.GK,
-        PlayerRole.LB or PlayerRole.CB or PlayerRole.RB => Position.DEF,
+        PlayerRole.LB or PlayerRole.CB or PlayerRole.RB
+            or PlayerRole.LWB or PlayerRole.RWB => Position.DEF,
         PlayerRole.CDM or PlayerRole.CM or PlayerRole.CAM or PlayerRole.LM or PlayerRole.RM =>
             Position.MID,
         _ => Position.FWD
@@ -69,11 +76,19 @@ public static class RoleFitness
 
     private enum Flank { Left, Right }
 
+    /// <summary>
+    /// Whether a role is a wide attacking job. Winger and wide midfielder are
+    /// interchangeable on a flank; a wing-back, who holds the same flank from
+    /// the back line, is not one of them.
+    /// </summary>
+    private static bool IsWideAttacking(PlayerRole role) =>
+        role is PlayerRole.LW or PlayerRole.RW or PlayerRole.LM or PlayerRole.RM;
+
     /// <summary>Which flank a wide attacking role works, or null for anyone else.</summary>
     private static Flank? FlankOf(PlayerRole role) => role switch
     {
-        PlayerRole.LW or PlayerRole.LM => Flank.Left,
-        PlayerRole.RW or PlayerRole.RM => Flank.Right,
+        PlayerRole.LW or PlayerRole.LM or PlayerRole.LWB => Flank.Left,
+        PlayerRole.RW or PlayerRole.RM or PlayerRole.RWB => Flank.Right,
         _ => null
     };
 
@@ -88,11 +103,20 @@ public static class RoleFitness
 
         // Winger and wide midfielder are one job on a given flank: a left
         // winger dropped into left midfield, or the reverse, is still at home.
+        // A wing-back shares the flank but not the job — he defends first — so
+        // he is left to the neighbour and line rules below rather than being
+        // read as at home at winger.
         var naturalFlank = FlankOf(natural);
         var playedFlank = FlankOf(playedAs);
+        var bothAttackWide = IsWideAttacking(natural) && IsWideAttacking(playedAs);
 
-        if (naturalFlank is not null && playedFlank is not null)
+        if (bothAttackWide)
             return naturalFlank == playedFlank ? Native : OtherFlank;
+
+        // Either way, the wrong flank is the wrong foot: a right wing-back at
+        // left wing-back is as awkward as a right winger on the left.
+        if (naturalFlank is not null && playedFlank is not null && naturalFlank != playedFlank)
+            return OtherFlank;
 
         if (natural == PlayerRole.GK || playedAs == PlayerRole.GK)
             return Goalkeeping;

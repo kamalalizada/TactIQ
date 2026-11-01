@@ -34,9 +34,11 @@ public class AttackResolver(Random random)
         var assist = PickAssist(attacking, shooter);
         var keeper = defending.Keeper;
 
-        // Shot quality against the keeper's ability to deal with it.
+        // Shot quality against the keeper's ability to deal with it. A keeper
+        // is rated on keeping goal, not on defending: the two are different
+        // jobs, and a shot-stopper who cannot tackle is still a fine keeper.
         var shotQuality = (shooter.Shooting * 0.7 + shooter.Dribbling * 0.3) / 100.0;
-        var keeperQuality = keeper is null ? 0.35 : keeper.Defending / 100.0;
+        var keeperQuality = keeper is null ? 0.35 : keeper.Goalkeeping / 100.0;
         
         // Increase the keeper's saving multiplier so high-rated keepers actually save most shots.
         var scoreChance = shotQuality * 0.65 * (1 - keeperQuality * 0.75);

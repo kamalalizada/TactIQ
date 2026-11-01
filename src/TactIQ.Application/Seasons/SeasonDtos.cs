@@ -55,6 +55,14 @@ public record PlayerDto(
     int Dribbling,
     int Defending,
     int Physical,
+
+    // Goalkeeping; zero for an outfield player, whose six above say everything.
+    int Diving,
+    int Handling,
+    int Kicking,
+    int Reflexes,
+    int Speed,
+    int Positioning,
     int Overall,
     bool IsStarter,
     int LineupSlot,

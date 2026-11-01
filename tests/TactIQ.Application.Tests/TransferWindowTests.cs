@@ -1,4 +1,4 @@
-using TactIQ.Application.Seeding;
+﻿using TactIQ.Application.Seeding;
 using TactIQ.Application.Transfers;
 using TactIQ.Domain.Entities;
 using TactIQ.Domain.Enums;
@@ -150,10 +150,26 @@ public class SquadLimitsTests
         // A club that could not sell a single player would sit out the window
         // entirely, so the floors are checked against the squads as seeded.
         var factory = new TeamFactory(new Random(4242));
-        var teams = factory.CreateTeams(Guid.NewGuid(), 58);
+        var teams = factory.CreateTeams(Guid.NewGuid(), SquadData.Playable.Count);
 
         Assert.All(teams, team =>
             Assert.Contains(team.Players, player => SquadLimits.CanSell(team, player)));
+    }
+
+    [Fact]
+    public void TheCeilingLeavesRoomForAReserveKeeperBehindTheFirstTwo()
+    {
+        // The seed carries third and fourth keepers, which the old ceiling of
+        // twenty-five had no room for. A club at the ceiling must still be a
+        // club that could have been seeded.
+        var factory = new TeamFactory(new Random(4242));
+
+        Assert.All(factory.CreateTeams(Guid.NewGuid(), SquadData.Playable.Count), team =>
+            Assert.True(
+                team.Players.Count <= SquadLimits.MaximumSquad,
+                $"{team.Name} was seeded with {team.Players.Count}, over the ceiling."));
+
+        Assert.True(SquadLimits.MaximumSquad >= SquadRules.SquadSize + 3);
     }
 
     [Fact]
@@ -161,7 +177,7 @@ public class SquadLimitsTests
     {
         var factory = new TeamFactory(new Random(4242));
 
-        Assert.All(factory.CreateTeams(Guid.NewGuid(), 58), team =>
+        Assert.All(factory.CreateTeams(Guid.NewGuid(), SquadData.Playable.Count), team =>
             Assert.True(team.Budget >= 2_000_000m, $"{team.Name} has no budget."));
     }
 }

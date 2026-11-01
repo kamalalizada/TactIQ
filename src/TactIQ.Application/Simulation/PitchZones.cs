@@ -1,4 +1,4 @@
-using TactIQ.Domain.Enums;
+﻿using TactIQ.Domain.Enums;
 
 namespace TactIQ.Application.Simulation;
 
@@ -24,6 +24,13 @@ public static class PitchZones
     private const double DefenceDepth = 35;
     /// <summary>A defender this close to a touchline is a full-back.</summary>
     private const double FullBackLane = 28;
+    /// <summary>
+    /// A wide defender pushed beyond here is a wing-back: high enough to be
+    /// the flank's whole width, still behind the midfield line. The squad
+    /// screen draws a full-back at 24, so this leaves him room to be nudged
+    /// about without quietly changing job.
+    /// </summary>
+    private const double WingBackDepth = 30;
 
     /// <summary>Midfield runs from the back line to here; beyond it is attack.</summary>
     private const double MidfieldDepth = 68;
@@ -49,9 +56,19 @@ public static class PitchZones
             return PlayerRole.GK;
 
         if (y < DefenceDepth)
-            return x < FullBackLane ? PlayerRole.LB
-                : x > Max - FullBackLane ? PlayerRole.RB
-                : PlayerRole.CB;
+        {
+            if (x >= FullBackLane && x <= Max - FullBackLane)
+                return PlayerRole.CB;
+
+            // Wide and deep is a full-back; wide and pushed on is a wing-back,
+            // which is the same player given the whole flank.
+            var left = x < FullBackLane;
+
+            if (y < WingBackDepth)
+                return left ? PlayerRole.LB : PlayerRole.RB;
+
+            return left ? PlayerRole.LWB : PlayerRole.RWB;
+        }
 
         if (y < MidfieldDepth)
         {
@@ -79,7 +96,11 @@ public static class LineupRules
 
     /// <summary>Roles that hold one flank, so a side has room for one of each.</summary>
     private static readonly PlayerRole[] OnePerSide =
-        [PlayerRole.LB, PlayerRole.RB, PlayerRole.LW, PlayerRole.RW];
+    [
+        PlayerRole.LB, PlayerRole.RB,
+        PlayerRole.LWB, PlayerRole.RWB,
+        PlayerRole.LW, PlayerRole.RW
+    ];
 
     /// <summary>Why these roles cannot take the field together, or null if they can.</summary>
     public static string? Problem(IReadOnlyCollection<PlayerRole> roles)

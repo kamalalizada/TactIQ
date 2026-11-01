@@ -159,6 +159,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(p => p.MarketValue).HasPrecision(18, 2);
             e.HasIndex(p => p.TeamId);
             e.Ignore(p => p.IsAvailable);
+
+            // Worked out from the keeping attributes; never stored.
+            e.Ignore(p => p.Goalkeeping);
         });
 
         builder.Entity<Match>(e =>

@@ -1,4 +1,4 @@
-namespace TactIQ.Domain.Enums;
+﻿namespace TactIQ.Domain.Enums;
 
 /// <summary>
 /// Where a player actually plays, as a football game records it. The broader
@@ -25,5 +25,11 @@ public enum PlayerRole
     // Attack.
     LW = 9,
     ST = 10,
-    RW = 11
+    RW = 11,
+
+    // Wing-backs, who hold a flank on their own: a full-back's defending with
+    // a winger's ground to cover. Numbered after the rest so that the roles
+    // already stored against players keep their meaning.
+    LWB = 12,
+    RWB = 13
 }

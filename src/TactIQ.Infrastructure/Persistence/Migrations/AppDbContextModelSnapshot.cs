@@ -336,11 +336,20 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                     b.Property<int>("Defending")
                         .HasColumnType("integer");
 
+                    b.Property<int>("Diving")
+                        .HasColumnType("integer");
+
                     b.Property<int>("Dribbling")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Handling")
                         .HasColumnType("integer");
 
                     b.Property<bool>("IsStarter")
                         .HasColumnType("boolean");
+
+                    b.Property<int>("Kicking")
+                        .HasColumnType("integer");
 
                     b.Property<int?>("LineupRole")
                         .HasColumnType("integer");
@@ -389,6 +398,12 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                     b.Property<int>("Position")
                         .HasColumnType("integer");
 
+                    b.Property<int>("Positioning")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Reflexes")
+                        .HasColumnType("integer");
+
                     b.Property<int>("Role")
                         .HasColumnType("integer");
 
@@ -396,6 +411,9 @@ namespace TactIQ.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer");
 
                     b.Property<int>("Shooting")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Speed")
                         .HasColumnType("integer");
 
                     b.Property<Guid>("TeamId")

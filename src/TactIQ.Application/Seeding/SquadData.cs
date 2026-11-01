@@ -21,6 +21,13 @@ public record SquadPlayer(
     int Dribbling,
     int Defending,
     int Physical,
+    // Goalkeeping, for the keepers; zero for everybody else.
+    int Diving = 0,
+    int Handling = 0,
+    int Kicking = 0,
+    int Reflexes = 0,
+    int Speed = 0,
+    int Positioning = 0,
     /// <summary>The player's real market value in euros, where one is known.</summary>
     decimal? MarketValue = null);
 

@@ -1,4 +1,4 @@
-using TactIQ.Domain.Enums;
+﻿using TactIQ.Domain.Enums;
 
 namespace TactIQ.Application.Simulation;
 
@@ -43,8 +43,16 @@ public static class FormationShape
             [
                 PlayerRole.GK,
                 PlayerRole.CB, PlayerRole.CB, PlayerRole.CB,
-                PlayerRole.LM, PlayerRole.CM, PlayerRole.CDM, PlayerRole.CM, PlayerRole.RM,
+                PlayerRole.LWB, PlayerRole.CM, PlayerRole.CDM, PlayerRole.CM, PlayerRole.RWB,
                 PlayerRole.ST, PlayerRole.ST
+            ],
+            ["3-4-2-1"] =
+            [
+                PlayerRole.GK,
+                PlayerRole.CB, PlayerRole.CB, PlayerRole.CB,
+                PlayerRole.LWB, PlayerRole.CM, PlayerRole.CM, PlayerRole.RWB,
+                PlayerRole.CAM, PlayerRole.CAM,
+                PlayerRole.ST
             ],
             ["5-3-2"] =
             [
@@ -67,6 +75,7 @@ public static class FormationShape
                 PlayerRole.LM, PlayerRole.CM, PlayerRole.CM, PlayerRole.RM,
                 PlayerRole.LW, PlayerRole.ST, PlayerRole.RW
             ],
+
         };
 
     public static IReadOnlyCollection<string> Available => Slots.Keys;

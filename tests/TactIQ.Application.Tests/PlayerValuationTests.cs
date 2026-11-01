@@ -181,7 +181,7 @@ public class PlayerValuationTests
     [Fact]
     public void SeededMarketValuesReachTheClubs()
     {
-        var city = new TeamFactory(new Random(1)).CreateTeams(Guid.NewGuid(), 58)
+        var city = new TeamFactory(new Random(1)).CreateTeams(Guid.NewGuid(), SquadData.Playable.Count)
             .Single(team => team.Name == "Manchester City");
 
         var haaland = city.Players.Single(p => p.Name == "Erling Haaland");

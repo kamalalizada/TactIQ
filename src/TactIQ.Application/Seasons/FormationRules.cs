@@ -1,4 +1,4 @@
-using TactIQ.Application.Simulation;
+﻿using TactIQ.Application.Simulation;
 using TactIQ.Domain.Enums;
 
 namespace TactIQ.Application.Seasons;
@@ -18,7 +18,10 @@ public static class FormationRules
             ["4-4-2"] = (4, 4, 2),
             ["4-3-3"] = (4, 3, 3),
             ["4-2-3-1"] = (4, 5, 1),
-            ["3-5-2"] = (3, 5, 2),
+            // Football writes these with a back three, but the two wing-backs
+            // defend, so the squad needs five at the back to fill them.
+            ["3-5-2"] = (5, 3, 2),
+            ["3-4-2-1"] = (5, 4, 1),
             ["5-3-2"] = (5, 3, 2),
             ["4-5-1"] = (4, 5, 1),
             ["3-4-3"] = (3, 4, 3),
