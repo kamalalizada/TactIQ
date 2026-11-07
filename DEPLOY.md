@@ -2,7 +2,7 @@
 
 TactIQ goes online on **Render** so the project can be linked from a CV, with
 the database on **Neon**. Free tier throughout: no server bill, no domain bill.
-The address is `https://<service name>.onrender.com`.
+The address is **https://tactiq-xhpe.onrender.com**.
 
 ## Decisions already made
 
@@ -88,8 +88,9 @@ The limits, all under `Guests` and `LiveMatches` in `appsettings.json`:
 A live match paused for 10 minutes is closed, so abandoned ones free their slot.
 
 The address is the first one in `X-Forwarded-For`. Render does not document this
-header's contents, so it is unconfirmed until step 5, and a client can forge it;
-the cap of 50 is what bounds the harm.
+header, but on the live site a sixth request from one address is refused while
+another address still gets through, so visitors are told apart. A client can forge
+the header; the cap of 50 is what bounds the harm.
 
 ### 3 — Dockerfile
 
@@ -102,43 +103,50 @@ every migration in 16 s, and peaks at 163 MB. On that first boot the log shows t
 `fail` lines for `__EFMigrationsHistory`. They are harmless: EF looks for the table
 before creating it.
 
-### 4 — Deploy (Kamal runs these)
+### 4 — Deploy
 
-1. **Neon:** create a project in a region near Render's, and copy the **direct**
-   connection details, not the pooled ones, because migrations run on boot.
-2. **Render:** New → Web Service → this GitHub repo. Language **Docker**, plan
-   **Free**, health check path `/health`, same region if there is one.
-   The first build takes a few minutes.
-3. Set the environment variables on the service:
+Done on 2026-11-02: a Render free web service in Frankfurt, built from the
+Dockerfile, with a Neon database in Frankfurt. Every push to `main` deploys.
 
-   ```
-   Jwt__Key=<32+ random characters>
-   ConnectionStrings__Default=Host=<host>;Database=<db>;Username=<user>;Password=<password>;SSL Mode=Require
-   ```
+The service reads two environment variables, set in Render's dashboard:
 
-Migrations run themselves: `Program.cs` calls `MigrateDatabaseAsync()` on boot.
-Do not add a payment method unless Render insists: without one, going over a
-limit suspends the service instead of billing for it. Render's pages do not say
-whether signing up asks for one.
+```
+Jwt__Key=<32+ random characters>
+ConnectionStrings__Default=Host=<host>;Database=<db>;Username=<user>;Password=<password>;SSL Mode=Require
+```
+
+Use Neon's **direct** connection, not the pooled one, because migrations run on
+boot. Do not add a payment method unless Render insists: without one, going over a
+limit suspends the service instead of billing for it.
+
+Measured on the live site: a new career 12 s, a simulated week 10 to 14 s, and a
+live match keeps time at 1x.
 
 ### 5 — Check and publish
 
 - Open the link in a **private window**, play through as a guest.
-- Press "Qonaq kimi oyna" in six fresh private windows on one network: the
-  sixth must be refused. If a visitor on **another** network is refused too, every
-  request looks like one address, and `GuestRules.ClientKey` needs another header.
 - Open a second guest in another browser, pick a different club, confirm the two
   careers do not touch.
 - Try it on a phone.
 - Write the README: live link, screenshots, stack, local setup.
 
-## Keeping it awake (optional)
+## Keeping it awake — done
 
-An uptime monitor calling `/health` every 10 minutes counts as inbound traffic,
-so the service should not sleep and a visitor should not wait a minute. It must
-be `/health`: Render answers `/robots.txt` itself without waking the service.
-Render's documentation neither allows nor forbids this. Without it, the first
-visitor after a quiet spell simply waits.
+An UptimeRobot monitor (free plan, every 5 minutes) calls the site, which
+counts as inbound traffic, so the service does not sleep and a visitor does not
+wait a minute. It must not be `/robots.txt`: Render answers that itself without
+waking the service. Render's documentation neither allows nor forbids this.
+
+What it costs:
+
+- The service now runs all month: up to 744 of the 750 free hours. The hours
+  belong to the workspace, so a second free service there would exhaust them
+  and Render would suspend both until the next month.
+- `/health` and the pages do not touch the database, but the hourly guest
+  cleanup now really runs every hour and wakes Neon each time. Estimated at
+  about 15 of the 100 CU-hours a month; check the Neon dashboard at month end.
+- Render may still restart a free service at any time, and a deploy rebuilds
+  it, so an occasional wait remains.
 
 ## If Render falls through
 
